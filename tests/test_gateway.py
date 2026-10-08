@@ -318,9 +318,14 @@ def test_harness_prompts_and_preamble_hide_infra() -> None:
         assert "gateway" not in prompt.lower()
         assert "prompt injection" in prompt  # anti-refusal framing is kept
         assert "<operator_instructions>" in prompt and "<conversation>" in prompt
+        assert "If asked what you are" in prompt and "including greetings" in prompt
     text = build_system_text(Conversation(system="You are helpful."), emulate_tools=False)
     assert "kiro" not in text.lower() and "gateway" not in text.lower()
     assert "AI assistant" in text  # identity-question guidance
+    # The canned identity sentence is for identity questions only; greetings and
+    # ordinary messages get a direct, brief reply without one.
+    assert "If asked what you are" in text
+    assert "including greetings" in text
 
 
 async def test_text_after_tool_call_is_dropped(client: httpx.AsyncClient) -> None:

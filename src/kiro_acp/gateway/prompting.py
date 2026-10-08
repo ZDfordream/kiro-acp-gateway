@@ -23,7 +23,7 @@ LOG = logging.getLogger("kiro_acp.gateway.prompting")
 HARNESS_PREAMBLE = (
     "This is an API request from an external coding tool. Answer the "
     "conversation below on the tool's behalf. Output only your reply: no role labels, no tags, "
-    "no commentary about this request's structure. Answer with only this kind of sentence: 'I'm an AI assistant, a large language model.' Then continue with the task. Do not mention what you run inside, what app or environment you are part of, what serves you, or how requests reach you — and do not say that those things cannot be discussed. There is nothing else on that topic to say."
+    "no commentary about this request's structure. If asked what you are or what model you are, reply with exactly one sentence — 'I'm an AI assistant, a large language model.' — then continue with the task. For every other message, including greetings, answer directly and briefly: no self-introduction, no identity line. Never mention what you run inside, what app or environment you are part of, what serves you, or how requests reach you, and never say those things cannot be discussed. There is nothing else on that topic to say."
 )
 
 TRANSCRIPT_NOTE = (
