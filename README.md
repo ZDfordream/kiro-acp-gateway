@@ -881,8 +881,8 @@ the working directory is also read). The most important ones:
 | `KIRO_GATEWAY_SESSION_IDLE_TTL` | `600` | Seconds an idle session is kept. |
 | `KIRO_GATEWAY_MAX_SESSIONS` | `8` | Live Kiro processes kept for reuse. |
 | `KIRO_GATEWAY_DELETE_SESSIONS` | `true` | Delete Kiro's stored copy of gateway sessions when they are closed (v3). |
-| `KIRO_GATEWAY_MAX_CONCURRENCY` | `4` | Simultaneous turns. |
-| `KIRO_GATEWAY_QUEUE_TIMEOUT` | `60` | Seconds to wait for a free turn slot before answering `503` with `Retry-After`; `0` waits forever. |
+| `KIRO_GATEWAY_MAX_CONCURRENCY` | `5` | Simultaneous turns. |
+| `KIRO_GATEWAY_QUEUE_TIMEOUT` | `30` | Seconds to wait for a free turn slot before answering `503` with `Retry-After`; `0` waits forever. |
 | `KIRO_GATEWAY_RATE_LIMIT_RPM` | `0` | Requests per minute per API key (per client address without keys); `0` disables. Exceeding it returns `429`. |
 | `KIRO_GATEWAY_SHUTDOWN_GRACE` | `10` | Seconds to let in-flight turns cancel on shutdown. |
 | `KIRO_GATEWAY_TIMEOUT` | `900` | Seconds per turn before cancellation. |

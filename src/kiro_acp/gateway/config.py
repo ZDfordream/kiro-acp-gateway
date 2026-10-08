@@ -156,10 +156,10 @@ class Settings(BaseSettings):
     )
 
     # --- execution -----------------------------------------------------------
-    max_concurrency: int = Field(default=4, ge=1, description="Max simultaneous Kiro turns")
+    max_concurrency: int = Field(default=5, ge=1, description="Max simultaneous Kiro turns")
     timeout: float = Field(default=900.0, description="Max seconds for one turn")
     queue_timeout: float = Field(
-        default=60.0,
+        default=30.0,
         description="Seconds a request waits for a free turn slot before 503 (0 = wait forever)",
     )
     rate_limit_rpm: int = Field(
