@@ -30,7 +30,7 @@ r = requests.post(
 r.raise_for_status()
 body = r.json()
 print(body["choices"][0]["message"]["content"])
-print("credits:", body["kiro"]["credits"], "session:", body["kiro"]["session_id"])
+print("credits:", body["meta"]["credits"], "session:", body["meta"]["session_id"])
 
 # 2. Streaming (Server-Sent Events)
 with requests.post(
@@ -77,5 +77,5 @@ r = requests.post(
 print(
     json.loads(r.json()["choices"][0]["message"]["content"]),
     "valid:",
-    r.json()["kiro"]["schema_valid"],
+    r.json()["meta"]["schema_valid"],
 )

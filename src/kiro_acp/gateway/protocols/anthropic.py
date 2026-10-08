@@ -35,6 +35,7 @@ from kiro_acp.gateway.protocols.common import (
     sse_response,
     stop_list,
 )
+from kiro_acp.gateway.sanitizer import wire_meta
 from kiro_acp.gateway.turn import (
     OutputDone,
     OutputText,
@@ -363,7 +364,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                 "stop_reason": "stop_sequence" if done.stop_sequence else stop_reason(done.finish),
                 "stop_sequence": done.stop_sequence,
                 "usage": usage_json(done.usage),
-                "kiro": done.kiro,
+                **wire_meta(done.kiro),
             }
         )
 

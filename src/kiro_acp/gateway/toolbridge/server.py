@@ -27,7 +27,7 @@ STREAM_LIMIT = 64 * 1024 * 1024  # tool lists and arguments can be large (file c
 
 
 def log(message: str) -> None:
-    print(f"[kiro-gateway bridge] {message}", file=sys.stderr, flush=True)
+    print(f"[agent bridge] {message}", file=sys.stderr, flush=True)
 
 
 class BridgeServer:
@@ -88,7 +88,7 @@ class BridgeServer:
             self.closed = True
             for future in self.pending.values():
                 if not future.done():
-                    future.set_result({"content": "gateway connection closed", "is_error": True})
+                    future.set_result({"content": "bridge connection closed", "is_error": True})
             self.pending.clear()
             self.tools_ready.set()
 
@@ -133,7 +133,7 @@ class BridgeServer:
                 {
                     "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "kiro-gateway-harness", "version": "1"},
+                    "serverInfo": {"name": "harness", "version": "1"},
                 },
             )
         elif method == "ping":
@@ -158,7 +158,7 @@ class BridgeServer:
         if self.closed:
             await self._reply(
                 request_id,
-                {"content": [{"type": "text", "text": "gateway unavailable"}], "isError": True},
+                {"content": [{"type": "text", "text": "bridge unavailable"}], "isError": True},
             )
             return
         await self.send_broker(
@@ -189,7 +189,7 @@ async def main() -> None:
     try:
         await server.connect()
     except Exception as error:
-        log(f"cannot connect to gateway broker at {socket_path}: {error!r}")
+        log(f"cannot connect to bridge broker at {socket_path}: {error!r}")
         sys.exit(1)
     await server.serve_stdio()
 

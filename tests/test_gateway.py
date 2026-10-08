@@ -131,7 +131,7 @@ async def test_chat_completion_basic(client: httpx.AsyncClient) -> None:
     assert body["choices"][0]["message"]["content"] == "hello there"
     assert body["choices"][0]["finish_reason"] == "stop"
     assert body["usage"]["total_tokens"] > 0
-    assert body["kiro"]["credits"] == 0.01
+    assert body["meta"]["credits"] == 0.01
 
 
 async def test_chat_completion_streaming(client: httpx.AsyncClient) -> None:
@@ -271,7 +271,7 @@ async def test_chat_tool_emulation_roundtrip(client: httpx.AsyncClient) -> None:
         },
     )
     assert follow.status_code == 200
-    assert follow.json()["kiro"]["reused_session"] is True
+    assert follow.json()["meta"]["reused_session"] is True
 
 
 async def test_harness_mode_uses_toolless_agent(client: httpx.AsyncClient) -> None:
@@ -280,12 +280,12 @@ async def test_harness_mode_uses_toolless_agent(client: httpx.AsyncClient) -> No
         "/v1/chat/completions",
         json={"model": "x", "messages": [{"role": "user", "content": "who"}], "tools": tools},
     )
-    assert with_tools.json()["kiro"]["agent"] == "kiro_planner"
+    assert with_tools.json()["meta"]["agent"] == "planner"
     without = await client.post(
         "/v1/chat/completions",
         json={"model": "x", "messages": [{"role": "user", "content": "who"}]},
     )
-    assert without.json()["kiro"]["agent"] == "kiro_default"
+    assert without.json()["meta"]["agent"] == "default"
 
 
 def test_harness_agent_provisioning(tmp_path: Path) -> None:
@@ -337,7 +337,7 @@ async def test_text_after_tool_call_is_dropped(client: httpx.AsyncClient) -> Non
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "Running it."
     assert body["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "run"
-    assert body["kiro"]["dropped_text_after_tool_calls"].strip() == "MYHOST"
+    assert body["meta"]["dropped_text_after_tool_calls"].strip() == "MYHOST"
 
 
 async def test_chat_tool_emulation_streaming(client: httpx.AsyncClient) -> None:
@@ -458,7 +458,7 @@ async def test_chat_kiro_tool_activity_as_reasoning(client: httpx.AsyncClient) -
     assert message["content"] == "done"
     assert "⚙ Running: ls" in message["reasoning_content"]
     assert "a.txt" in message["reasoning_content"]  # execute output excerpt
-    assert response.json()["kiro"]["tool_calls"][0]["title"] == "Running: ls"
+    assert response.json()["meta"]["tool_calls"][0]["title"] == "Running: ls"
 
 
 async def test_session_affinity_reuses_process(client: httpx.AsyncClient) -> None:
@@ -467,7 +467,7 @@ async def test_session_affinity_reuses_process(client: httpx.AsyncClient) -> Non
         json={"model": "x", "messages": [{"role": "user", "content": "echo: one"}]},
     )
     reply = first.json()["choices"][0]["message"]
-    assert first.json()["kiro"]["reused_session"] is False
+    assert first.json()["meta"]["reused_session"] is False
     second = await client.post(
         "/v1/chat/completions",
         json={
@@ -480,8 +480,8 @@ async def test_session_affinity_reuses_process(client: httpx.AsyncClient) -> Non
         },
     )
     body = second.json()
-    assert body["kiro"]["reused_session"] is True
-    assert body["kiro"]["session_id"] == first.json()["kiro"]["session_id"]
+    assert body["meta"]["reused_session"] is True
+    assert body["meta"]["session_id"] == first.json()["meta"]["session_id"]
     # Only the new message was sent to the reused session.
     assert (
         json.loads(body["choices"][0]["message"]["content"]) == ["[User]\necho: one"]
@@ -499,7 +499,7 @@ async def test_session_affinity_reuses_process(client: httpx.AsyncClient) -> Non
             ],
         },
     )
-    assert third.json()["kiro"]["reused_session"] is False
+    assert third.json()["meta"]["reused_session"] is False
 
 
 async def test_stateless_mode(workspace: Path, engine: str) -> None:
@@ -528,8 +528,8 @@ async def test_stateless_mode(workspace: Path, engine: str) -> None:
                 ],
             },
         )
-        assert first.json()["kiro"]["reused_session"] is False
-        assert second.json()["kiro"]["reused_session"] is False
+        assert first.json()["meta"]["reused_session"] is False
+        assert second.json()["meta"]["reused_session"] is False
     assert app.state.backend.health()["live_sessions"] == 0
 
 
@@ -621,7 +621,7 @@ async def test_error_classification_and_retry_after(client: httpx.AsyncClient) -
         for e in sse_events(streamed.text)
         if isinstance(e[1], dict) and "error" in e[1]
     ]
-    assert errors and errors[0]["code"] == "kiro_timeout"
+    assert errors and errors[0]["code"] == "upstream_timeout"
 
 
 async def test_stop_sequences_enforced(client: httpx.AsyncClient) -> None:
@@ -636,7 +636,7 @@ async def test_stop_sequences_enforced(client: httpx.AsyncClient) -> None:
     body = chat.json()
     assert body["choices"][0]["message"]["content"] == "one two "
     assert body["choices"][0]["finish_reason"] == "stop"
-    assert body["kiro"]["reused_session"] is False
+    assert body["meta"]["reused_session"] is False
     msg = await client.post(
         "/v1/messages",
         headers=ANTHROPIC_HEADERS,
@@ -704,7 +704,7 @@ async def test_structured_output_validation_and_retry(client: httpx.AsyncClient)
     )
     body = good.json()
     assert body["choices"][0]["message"]["content"] == '{"ok": true}'
-    assert body["kiro"]["schema_valid"] is True
+    assert body["meta"]["schema_valid"] is True
     # First reply is invalid; the gateway re-prompts and the fake agent corrects itself.
     fixed = await client.post(
         "/v1/chat/completions",
@@ -715,7 +715,7 @@ async def test_structured_output_validation_and_retry(client: httpx.AsyncClient)
         },
     )
     body = fixed.json()
-    assert body["kiro"]["schema_valid"] is True
+    assert body["meta"]["schema_valid"] is True
     assert body["choices"][0]["message"]["content"] == '{"ok": true}'
     # Streaming cannot retry; it reports validity only.
     streamed = await client.post(
@@ -729,8 +729,8 @@ async def test_structured_output_validation_and_retry(client: httpx.AsyncClient)
         },
     )
     chunks = [e[1] for e in sse_events(streamed.text) if isinstance(e[1], dict)]
-    assert chunks[-1]["kiro"]["schema_valid"] is False
-    assert any("invalid JSON" in err or "ok" in err for err in chunks[-1]["kiro"]["schema_errors"])
+    assert chunks[-1]["meta"]["schema_valid"] is False
+    assert any("invalid JSON" in err or "ok" in err for err in chunks[-1]["meta"]["schema_errors"])
     anthropic = await client.post(
         "/v1/messages",
         headers=ANTHROPIC_HEADERS,
@@ -741,7 +741,7 @@ async def test_structured_output_validation_and_retry(client: httpx.AsyncClient)
             "messages": [{"role": "user", "content": 'echo: {"ok": "nope"}'}],
         },
     )
-    assert anthropic.json()["kiro"]["schema_valid"] is True  # retried and corrected
+    assert anthropic.json()["meta"]["schema_valid"] is True  # retried and corrected
 
 
 async def test_per_request_workspace_allowlist(
@@ -771,7 +771,7 @@ async def test_per_request_workspace_allowlist(
             json={"model": "x", "messages": [{"role": "user", "content": "who"}]},
         )
         assert ok.status_code == 200, ok.text
-        assert ok.json()["kiro"]["workspace"] == str(other.resolve())
+        assert ok.json()["meta"]["workspace"] == str(other.resolve())
         denied = await http.post(
             "/v1/chat/completions",
             headers={"X-Kiro-Workspace": str(forbidden)},
@@ -800,7 +800,7 @@ async def test_per_request_workspace_allowlist(
                 ],
             },
         )
-        assert follow_other.json()["kiro"]["reused_session"] is True
+        assert follow_other.json()["meta"]["reused_session"] is True
         follow_default = await http.post(
             "/v1/chat/completions",
             json={
@@ -812,7 +812,7 @@ async def test_per_request_workspace_allowlist(
                 ],
             },
         )
-        assert follow_default.json()["kiro"]["reused_session"] is False
+        assert follow_default.json()["meta"]["reused_session"] is False
 
 
 async def test_workspace_header_disabled_by_default(
@@ -982,7 +982,7 @@ async def test_mcp_bridge_chat_roundtrip(mcp_client: httpx.AsyncClient) -> None:
     assert call["function"]["name"] == "Read" and json.loads(call["function"]["arguments"]) == {
         "file_path": "notes.txt"
     }
-    assert body["kiro"]["tool_mode"] == "mcp" and body["kiro"]["agent"] == "kiro_planner"
+    assert body["meta"]["tool_mode"] == "mcp" and body["meta"]["agent"] == "planner"
     # The Kiro turn is still open; deliver the result and get the continuation.
     second = await mcp_client.post(
         "/v1/chat/completions",
@@ -1000,7 +1000,7 @@ async def test_mcp_bridge_chat_roundtrip(mcp_client: httpx.AsyncClient) -> None:
     body2 = second.json()
     assert body2["choices"][0]["message"]["content"] == "result: hello from notes"
     assert body2["choices"][0]["finish_reason"] == "stop"
-    assert body2["kiro"]["session_id"] == body["kiro"]["session_id"]
+    assert body2["meta"]["session_id"] == body["meta"]["session_id"]
     assert mcp_client.app.state.backend.health()["live_sessions"] == 1  # type: ignore[attr-defined]
 
 
@@ -1112,8 +1112,8 @@ async def test_mcp_bridge_no_tools_uses_agent_mode(mcp_client: httpx.AsyncClient
         "/v1/chat/completions",
         json={"model": "x", "messages": [{"role": "user", "content": "who"}]},
     )
-    assert response.json()["kiro"].get("tool_mode") is None
-    assert response.json()["kiro"]["agent"] == "kiro_default"
+    assert response.json()["meta"].get("tool_mode") is None
+    assert response.json()["meta"]["agent"] == "default"
 
 
 # --------------------------------------------------------------------------- legacy completions
@@ -1194,7 +1194,7 @@ async def test_responses_function_calls(client: httpx.AsyncClient) -> None:
         },
     )
     assert follow.status_code == 200
-    assert follow.json()["kiro"]["reused_session"] is True
+    assert follow.json()["meta"]["reused_session"] is True
 
 
 async def test_responses_codex_item_types(client: httpx.AsyncClient) -> None:
@@ -1280,7 +1280,7 @@ async def test_responses_custom_tool_roundtrip(client: httpx.AsyncClient) -> Non
         },
     )
     assert follow.status_code == 200, follow.text
-    assert follow.json()["kiro"]["reused_session"] is True
+    assert follow.json()["meta"]["reused_session"] is True
 
 
 async def test_responses_custom_tool_streaming(client: httpx.AsyncClient) -> None:
@@ -1366,7 +1366,7 @@ async def test_chat_custom_tool(client: httpx.AsyncClient) -> None:
         },
     )
     assert follow.status_code == 200, follow.text
-    assert follow.json()["kiro"]["reused_session"] is True
+    assert follow.json()["meta"]["reused_session"] is True
 
 
 async def test_refusal_is_surfaced(client: httpx.AsyncClient) -> None:
@@ -1378,8 +1378,8 @@ async def test_refusal_is_surfaced(client: httpx.AsyncClient) -> None:
     body = response.json()
     assert response.status_code == 200, response.text
     assert body["choices"][0]["finish_reason"] == "content_filter"
-    assert body["kiro"]["refusal"]["category"] == "content_filter"
-    assert body["kiro"]["recommended_model"] == "claude-opus-4.8"
+    assert body["meta"]["refusal"]["category"] == "content_filter"
+    assert body["meta"]["recommended_model"] == "claude-opus-4.8"
     anthropic = await client.post(
         "/v1/messages",
         headers=ANTHROPIC_HEADERS,
@@ -1427,12 +1427,12 @@ async def test_image_too_large_is_rejected(client: httpx.AsyncClient) -> None:
         ("The model 'claude-opus-4.8' is not available right now", 503, "model_unavailable"),
         ("The model you've selected is temporarily unavailable.", 503, "model_unavailable"),
         ("Improperly formed request", 400, "malformed_request"),
-        ("Kiro failed to generate a response", 503, "kiro_unavailable"),
-        ("request timed out after 30s", 504, "kiro_timeout"),
-        ("Not signed in. Run kiro-cli login", 502, "kiro_auth"),
-        ("HTTP status 403 from backend", 502, "kiro_auth"),
-        ("ECONNRESET while streaming", 502, "kiro_connection"),
-        ("something unexpected", 502, "kiro_error"),
+        ("Kiro failed to generate a response", 503, "upstream_unavailable"),
+        ("request timed out after 30s", 504, "upstream_timeout"),
+        ("Not signed in. Run kiro-cli login", 502, "upstream_auth"),
+        ("HTTP status 403 from backend", 502, "upstream_auth"),
+        ("ECONNRESET while streaming", 502, "upstream_connection"),
+        ("something unexpected", 502, "upstream_error"),
     ],
 )
 def test_classify_kiro_error(message: str, status: int, code: str) -> None:
@@ -1496,7 +1496,7 @@ async def test_acp_errors_outside_turns_are_classified(client: httpx.AsyncClient
     backend.models = not_logged_in
     response = await client.get("/v1/models")
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "kiro_auth"
+    assert response.json()["error"]["code"] == "upstream_auth"
 
 
 MCP_CATALOGUE = json.dumps(
@@ -1550,7 +1550,7 @@ async def test_mcp_servers_default_discovered_and_requested(
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        return body["choices"][0]["message"]["content"], body["kiro"].get("mcp_servers")
+        return body["choices"][0]["message"]["content"], body["meta"].get("mcp_servers")
 
     # default catalogue entry + everything discovered in the workspace
     text, listed = await names()
@@ -1599,7 +1599,7 @@ async def test_mcp_servers_ignored_for_harness_requests(
         },
     )
     assert response.status_code == 200
-    assert "mcp_servers" not in response.json()["kiro"]
+    assert "mcp_servers" not in response.json()["meta"]
 
 
 async def test_inline_agent(client: httpx.AsyncClient, engine: str) -> None:
@@ -1616,9 +1616,9 @@ async def test_inline_agent(client: httpx.AsyncClient, engine: str) -> None:
     assert response.status_code == 200, response.text
     reply = response.json()
     text = reply["choices"][0]["message"]["content"]
-    assert text.startswith("mode gateway-inline-") and "prompt: You are a haiku bot." in text
+    assert text.startswith("mode inline-") and "prompt: You are a haiku bot." in text
     assert "tools: read" in text
-    assert reply["kiro"]["agent"].startswith("gateway-inline-")
+    assert reply["meta"]["agent"].startswith("inline-")
     # Anthropic route, same extension; invalid definitions are 400
     anthropic = await client.post(
         "/v1/messages",
@@ -1694,10 +1694,10 @@ async def test_stalled_turn_is_cancelled_and_nudged(stall_client: httpx.AsyncCli
     body = response.json()
     message = body["choices"][0]["message"]
     assert "resumed after stall" in message["content"]
-    assert body["kiro"]["stalls"] == 1 and body["kiro"]["stall_recoveries"] == 1
+    assert body["meta"]["stalls"] == 1 and body["meta"]["stall_recoveries"] == 1
     assert "Model stalled on Running: sleep 999" in (message.get("reasoning_content") or "")
     # the ledger saw the stall and the recovery turn
-    audit = await stall_client.get(body["kiro"]["audit"])
+    audit = await stall_client.get(body["meta"]["audit"])
     kinds = [r["kind"] for r in audit.json()["records"]]
     assert "stall" in kinds and kinds.count("turn_end") >= 1
 
@@ -1715,7 +1715,7 @@ async def test_stall_without_recovery_is_an_error(workspace: Path, engine: str) 
                 json={"model": "x", "messages": [{"role": "user", "content": "stall"}]},
             )
             assert response.status_code == 504
-            assert response.json()["error"]["code"] == "kiro_stall"
+            assert response.json()["error"]["code"] == "upstream_stall"
 
 
 async def test_audit_ledger_records_and_redacts(client: httpx.AsyncClient) -> None:
@@ -1725,18 +1725,18 @@ async def test_audit_ledger_records_and_redacts(client: httpx.AsyncClient) -> No
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    session_id = body["kiro"]["session_id"]
-    assert body["kiro"]["audit"] == f"/v1/kiro/sessions/{session_id}/audit"
-    listing = await client.get("/v1/kiro/sessions")
+    session_id = body["meta"]["session_id"]
+    assert body["meta"]["audit"] == f"/v1/admin/sessions/{session_id}/audit"
+    listing = await client.get("/v1/admin/sessions")
     assert any(row["session_id"] == session_id for row in listing.json()["data"])
-    audit = await client.get(body["kiro"]["audit"])
+    audit = await client.get(body["meta"]["audit"])
     assert audit.status_code == 200
     kinds = [r["kind"] for r in audit.json()["records"]]
     assert kinds[0] == "turn" and "tool_call" in kinds and "permission" in kinds
     assert "tool_result" in kinds and kinds[-1] == "turn_end"
     permission = next(r for r in audit.json()["records"] if r["kind"] == "permission")
     assert permission["decision"] == "allow_once"
-    missing = await client.get("/v1/kiro/sessions/nope/audit")
+    missing = await client.get("/v1/admin/sessions/nope/audit")
     assert missing.status_code == 404
     from kiro_acp.gateway.audit import redact
 
@@ -1806,11 +1806,11 @@ async def test_stats_and_dashboard(client: httpx.AsyncClient) -> None:
         json={"model": "x", "messages": [{"role": "user", "content": "echo: hi"}]},
     )
     page = await client.get("/dashboard", headers={"Authorization": ""})
-    assert page.status_code == 200 and "Kiro Gateway" in page.text
+    assert page.status_code == 200 and "API Relay" in page.text
     assert "text/html" in page.headers["content-type"]
-    denied = await client.get("/v1/kiro/stats", headers={"Authorization": ""})
+    denied = await client.get("/v1/admin/stats", headers={"Authorization": ""})
     assert denied.status_code == 401
-    stats = (await client.get("/v1/kiro/stats")).json()
+    stats = (await client.get("/v1/admin/stats")).json()
     assert stats["health"]["status"] == "ok"
     assert stats["gauges"]["live_sessions"] == 1 and stats["gauges"]["active_turns"] == 0
     assert stats["metrics"]["turns"][0]["finish"] == "stop"
@@ -1826,7 +1826,7 @@ async def test_stats_and_dashboard(client: httpx.AsyncClient) -> None:
             "tools": [READ_TOOL],
         },
     )
-    modes = {s["mode"]: s for s in (await client.get("/v1/kiro/stats")).json()["sessions"]}
+    modes = {s["mode"]: s for s in (await client.get("/v1/admin/stats")).json()["sessions"]}
     assert modes["harness"]["permissions"] == "client runs tools"
     assert stats["audit"] and stats["audit"][0]["records"] >= 2
 
@@ -1994,7 +1994,7 @@ async def test_mcp_path_enforces_stop_sequences_and_schema(mcp_client: httpx.Asy
             "messages": [{"role": "user", "content": 'echo: ```json\n{"ok": true}\n```'}],
         },
     )
-    assert good.json()["kiro"]["schema_valid"] is True
+    assert good.json()["meta"]["schema_valid"] is True
     assert json.loads(good.json()["choices"][0]["message"]["content"]) == {"ok": True}
     bad = await mcp_client.post(
         "/v1/chat/completions",
@@ -2008,7 +2008,7 @@ async def test_mcp_path_enforces_stop_sequences_and_schema(mcp_client: httpx.Asy
             "messages": [{"role": "user", "content": "echo: not json"}],
         },
     )
-    assert bad.json()["kiro"]["schema_valid"] is False and bad.json()["kiro"]["schema_errors"]
+    assert bad.json()["meta"]["schema_valid"] is False and bad.json()["meta"]["schema_errors"]
 
 
 async def test_tool_result_images_and_text_reach_the_bridge(mcp_client: httpx.AsyncClient) -> None:
@@ -2170,13 +2170,13 @@ async def test_metrics_endpoint(client: httpx.AsyncClient) -> None:
     response = await client.get("/metrics")
     assert response.status_code == 200
     text = response.text
-    assert 'kiro_gateway_turns_total{mode="agent"' in text and 'finish="stop"} 1' in text
-    assert "kiro_gateway_turn_seconds_bucket" in text
+    assert 'llm_turns_total{mode="agent"' in text and 'finish="stop"} 1' in text
+    assert "llm_turn_seconds_bucket" in text
     assert (
-        'kiro_gateway_errors_total{code="invalid_messages",status="400"} 1' in text
-        or 'kiro_gateway_errors_total{code="invalid_request",status="400"} 1' in text
+        'llm_errors_total{code="invalid_messages",status="400"} 1' in text
+        or 'llm_errors_total{code="invalid_request",status="400"} 1' in text
     ), text
-    assert "kiro_gateway_live_sessions" in text
+    assert "llm_live_sessions" in text
 
     response = await client.post(
         "/v1/responses", json={"model": "x", "input": "thought", "stream": True}
@@ -2282,7 +2282,7 @@ async def test_anthropic_tool_use_roundtrip(client: httpx.AsyncClient) -> None:
         },
     )
     assert follow.status_code == 200, follow.text
-    assert follow.json()["kiro"]["reused_session"] is True
+    assert follow.json()["meta"]["reused_session"] is True
 
 
 async def test_anthropic_streaming_with_thinking(client: httpx.AsyncClient) -> None:

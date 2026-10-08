@@ -355,7 +355,7 @@ curl -s "$KIRO_GATEWAY_URL/health"                                              
 ### Use it from Python with `requests`
 
 No SDK needed. The response bodies are the standard OpenAI / Anthropic shapes plus a
-`kiro` object (session id, credits, context usage, Kiro's own tool calls in agent mode).
+`meta` object (session id, credits, context usage, Kiro's own tool calls in agent mode).
 
 ```python
 import json
@@ -387,7 +387,7 @@ r = requests.post(
 r.raise_for_status()
 body = r.json()
 print(body["choices"][0]["message"]["content"])
-print("credits used:", body["kiro"]["credits"], "context:", body["kiro"].get("contextUsagePercentage"))
+print("credits used:", body["meta"]["credits"], "context:", body["meta"].get("contextUsagePercentage"))
 
 # Streaming chat completion (Server-Sent Events)
 with requests.post(
@@ -428,7 +428,7 @@ r = requests.post(
     },
     timeout=900,
 )
-print(json.loads(r.json()["content"][0]["text"]), r.json()["kiro"]["schema_valid"])
+print(json.loads(r.json()["content"][0]["text"]), r.json()["meta"]["schema_valid"])
 ```
 
 Errors come back with the HTTP status and body described under *Error format*; treat
@@ -444,9 +444,9 @@ Errors come back with the HTTP status and body described under *Error format*; t
 | `POST /v1/messages` | Anthropic Messages (streaming and non-streaming, tools, images, thinking blocks, `output_config.effort`) |
 | `POST /v1/messages/count_tokens` | Anthropic token counting (estimated) |
 | `GET /v1/models`, `GET /v1/models/{id}` | OpenAI format by default; Anthropic format when `anthropic-version` or `x-api-key` is present |
-| `GET /v1/kiro/stats` | JSON snapshot of metrics, live sessions, and recent audit activity (feeds the dashboard) |
+| `GET /v1/admin/stats` | JSON snapshot of metrics, live sessions, and recent audit activity (feeds the dashboard) |
 | `GET /dashboard` | Live dashboard page |
-| `GET /v1/kiro/sessions`, `GET /v1/kiro/sessions/{id}/audit` | Audit ledger |
+| `GET /v1/admin/sessions`, `GET /v1/admin/sessions/{id}/audit` | Audit ledger |
 | `GET /metrics` | Prometheus metrics |
 | `GET /health` | Gateway status |
 
@@ -625,7 +625,7 @@ carries tool definitions (`tools` in OpenAI requests, `tools` in Anthropic reque
 | Kiro agent | `KIRO_GATEWAY_HARNESS_AGENT_MCP` (bridged tools only) or the tool-less `KIRO_GATEWAY_HARNESS_AGENT` in `emulate` mode | `KIRO_GATEWAY_AGENT` (Kiro default) |
 | Engine | `KIRO_GATEWAY_HARNESS_ENGINE` (v2) | `KIRO_GATEWAY_ENGINE` (v3) |
 | Permissions | `KIRO_GATEWAY_HARNESS_PERMISSIONS` (deny) | `KIRO_GATEWAY_PERMISSIONS` |
-| Output | text plus `tool_calls` / `function_call` / `tool_use` | text; Kiro's own activity as reasoning and in `kiro.tool_calls` |
+| Output | text plus `tool_calls` / `function_call` / `tool_use` | text; Kiro's own activity as reasoning and in `meta.tool_calls` |
 
 A script that wants Kiro's own agentic behaviour must therefore send no `tools`. If it
 passes tools for some other reason (an SDK helper that always attaches them, for
@@ -722,7 +722,7 @@ request carries the whole conversation. In the default `affinity` mode the gatew
 fingerprints the conversation prefix and, when it matches a live Kiro session, sends only
 the new messages to that session. Otherwise it starts a fresh session and replays the
 history as a transcript. `KIRO_GATEWAY_SESSION_MODE=stateless` always starts fresh.
-Responses expose `kiro.session_id`, `kiro.reused_session`, `kiro.agent`, and `kiro.model`.
+Responses expose `meta.session_id`, `meta.reused_session`, `kiro.agent`, and `kiro.model`.
 
 **Tool choice.** `tool_choice` is honoured in both tool modes: `none` hides the tools,
 a named function (OpenAI `{"type": "function", ...}`, Anthropic `{"type": "tool", ...}`)
@@ -730,7 +730,7 @@ and `allowed_tools` restrict what Kiro is offered (the session pool keys on the 
 set), and `required` / `any` must end in a tool call: a turn that answers in text instead
 fails with `502 tool_choice_unsatisfied` rather than being passed off as a normal reply.
 Stop sequences, `max_tokens` enforcement, and structured-output validation apply in both
-modes too; with the MCP bridge a schema failure is reported (`kiro.schema_valid`) but not
+modes too; with the MCP bridge a schema failure is reported (`meta.schema_valid`) but not
 re-prompted, because the session is shared with an open tool loop. Images returned in
 Anthropic `tool_result` blocks (a screenshot, an image file read by Claude Code) reach
 Kiro as MCP image content, and text sent alongside tool results is forwarded with them.
@@ -762,7 +762,7 @@ agent inside `KIRO_GATEWAY_WORKSPACE`, subject to `KIRO_GATEWAY_PERMISSIONS` and
 `KIRO_GATEWAY_PERMISSION_RULES` (same rule syntax as the CLI). Its tool activity is
 surfaced as reasoning (`reasoning_content`, Responses `reasoning` items, Anthropic
 `thinking` blocks) by default; `KIRO_GATEWAY_TOOL_ACTIVITY=text` puts it in the answer and
-`none` hides it. Full details are always in the `kiro.tool_calls` extension field.
+`none` hides it. Full details are always in the `meta.tool_calls` extension field.
 
 **Stop sequences and limits.** Kiro ignores `stop`/`stop_sequences` and `max_tokens`, so
 the gateway enforces them itself: text is watched as it streams, and when a stop sequence
@@ -778,11 +778,11 @@ code table is under *Error format*.
 
 **Effort.** `reasoning_effort`, `reasoning.effort`, and `output_config.effort` map to
 Kiro's `low|medium|high|max` (`xhigh` becomes `max`). The v3 engine only exposes effort for
-some models; when it cannot be applied the response carries `kiro.effort_warning`.
+some models; when it cannot be applied the response carries `meta.effort_warning`.
 
 **Usage.** Kiro meters credits, not tokens. Responses include estimated token counts
 (about four characters per token) so client dashboards keep working, plus the real
-`kiro.credits` and `kiro.contextUsagePercentage`. Set `KIRO_GATEWAY_USAGE_ESTIMATES=false`
+`meta.credits` and `meta.contextUsagePercentage`. Set `KIRO_GATEWAY_USAGE_ESTIMATES=false`
 to report zeros.
 
 **Images** are accepted as base64 (`data:` URLs or Anthropic `base64` sources). Remote
@@ -803,14 +803,14 @@ as a `kiro` object (the OpenAI and Anthropic SDKs pass it through `extra_body`):
 
 Headers win over the body. One gateway can therefore serve several projects in agent
 mode; sessions are pooled per workspace (and per MCP server set and agent) and the
-response's `kiro.workspace`, `kiro.agent`, and `kiro.mcp_servers` show what was used.
+response's `meta.workspace`, `kiro.agent`, and `meta.mcp_servers` show what was used.
 
 **MCP servers for agent-mode turns.** Kiro's own agents already carry the MCP servers
 configured in Kiro. A gateway-side catalogue adds servers per request without touching
 Kiro's config: `KIRO_GATEWAY_MCP_SERVERS` is either inline JSON or the path of a file in
 the usual `mcpServers` shape (Claude Code, Cursor, VS Code `servers`, and OpenCode `mcp`
 blocks are all understood; stdio and `http`/`sse` entries; `disabled` entries are
-skipped). Requests select entries by name (`kiro.mcp_servers` or `X-Kiro-MCP-Servers`);
+skipped). Requests select entries by name (`meta.mcp_servers` or `X-Kiro-MCP-Servers`);
 `KIRO_GATEWAY_MCP_SERVERS_DEFAULT` names entries attached to every agent-mode turn, and
 `KIRO_GATEWAY_MCP_DISCOVERY=true` also attaches whatever the workspace's own `.mcp.json`,
 `.cursor/mcp.json`, `.vscode/mcp.json`, or `opencode.json[c]` declares. Full definitions
@@ -844,8 +844,8 @@ r = requests.post(f"{GATEWAY}/v1/chat/completions", headers=HEADERS, json={
 **Structured output.** With `response_format` (OpenAI) or `output_config.format`
 (Anthropic) carrying a JSON schema, the reply is fence-stripped and validated. A
 non-streaming request that fails validation is re-prompted once in the same Kiro session
-with the validation errors; the result carries `kiro.schema_valid` and, on failure,
-`kiro.schema_errors`. Streaming requests are validated but not retried.
+with the validation errors; the result carries `meta.schema_valid` and, on failure,
+`meta.schema_errors`. Streaming requests are validated but not retried.
 
 **Kiro's tool activity** (agent mode) is rendered with arguments, unified diffs for edits,
 output excerpts for commands, and Kiro's plan as a checklist; `KIRO_GATEWAY_TOOL_ACTIVITY_DETAIL=brief`
@@ -860,7 +860,7 @@ the working directory is also read). The most important ones:
 | Variable | Default | Description |
 |---|---|---|
 | `KIRO_GATEWAY_WORKSPACE` | current directory | Fallback directory for agent-mode requests that send no `X-Kiro-Workspace`. Point it at a project or a scratch directory, not the gateway checkout. Harness clients run their own tools in their own directory and are unaffected. |
-| `KIRO_GATEWAY_ALLOWED_WORKSPACES` | empty | Glob patterns (e.g. `/Users/me/code/*`, `/srv/repos/**`) a request may select with `X-Kiro-Workspace` / `kiro.workspace`. Set this for any gateway that serves scripts or curl; empty disables per-request workspaces. |
+| `KIRO_GATEWAY_ALLOWED_WORKSPACES` | empty | Glob patterns (e.g. `/Users/me/code/*`, `/srv/repos/**`) a request may select with `X-Kiro-Workspace` / `meta.workspace`. Set this for any gateway that serves scripts or curl; empty disables per-request workspaces. |
 | `KIRO_GATEWAY_API_KEY` | empty | Key required on `/v1/*`. Empty means no authentication. |
 | `KIRO_GATEWAY_HOST` / `PORT` | `127.0.0.1` / `8000` | Bind address. |
 | `KIRO_GATEWAY_CLI` | `kiro-cli` | Kiro executable. |
@@ -887,8 +887,8 @@ the working directory is also read). The most important ones:
 | `KIRO_GATEWAY_SHUTDOWN_GRACE` | `10` | Seconds to let in-flight turns cancel on shutdown. |
 | `KIRO_GATEWAY_TIMEOUT` | `900` | Seconds per turn before cancellation. |
 | `KIRO_GATEWAY_STALL_TIMEOUT` | `600` | Seconds of silence from Kiro before an agent-mode turn is cancelled and nudged to continue; `0` disables. |
-| `KIRO_GATEWAY_STALL_RECOVERIES` | `1` | Continue-nudges per request before a stall becomes `504 kiro_stall`. |
-| `KIRO_GATEWAY_AUDIT_RECORDS` | `500` | Audit ledger records per session (`/v1/kiro/sessions/{id}/audit`); `0` disables. |
+| `KIRO_GATEWAY_STALL_RECOVERIES` | `1` | Continue-nudges per request before a stall becomes `504 upstream_stall`. |
+| `KIRO_GATEWAY_AUDIT_RECORDS` | `500` | Audit ledger records per session (`/v1/admin/sessions/{id}/audit`); `0` disables. |
 | `KIRO_GATEWAY_RECORD_FRAMES` | empty | Directory to write every ACP frame to (JSONL per Kiro process) for debugging and replay. |
 | `KIRO_GATEWAY_SSE_KEEPALIVE` | `15` | Seconds of stream silence before a keepalive (`ping` / SSE comment); `0` disables. |
 | `KIRO_GATEWAY_WARMUP` | `true` | Load the model catalogue in the background at startup. |
@@ -913,7 +913,7 @@ the working directory is also read). The most important ones:
 | `KIRO_GATEWAY_CODEX_CATALOG` | `true` | Answer Codex's `GET /v1/models?client_version=...` with a Codex model catalogue for every Kiro model. |
 | `KIRO_GATEWAY_CODEX_TOOL_MODE` | `direct` | Tool style that catalogue selects for Codex: `direct` function tools or `code` mode. |
 | `KIRO_GATEWAY_METRICS` | `true` | Serve Prometheus metrics at `/metrics` (same authentication as `/v1`). |
-| `KIRO_GATEWAY_DASHBOARD` | `true` | Serve the live dashboard at `/dashboard` (data from `/v1/kiro/stats`, which needs the key). |
+| `KIRO_GATEWAY_DASHBOARD` | `true` | Serve the live dashboard at `/dashboard` (data from `/v1/admin/stats`, which needs the key). |
 | `KIRO_GATEWAY_SERVE_FS` / `SERVE_TERMINAL` | `false` | Offer client file-system / terminal capabilities to Kiro. |
 | `KIRO_GATEWAY_DEBUG_ACP` | `false` | Log raw ACP traffic. |
 | `KIRO_GATEWAY_LOG_LEVEL` | `info` | Log level. |
@@ -924,7 +924,7 @@ the working directory is also read). The most important ones:
 |---|---|
 | Claude Code: `401 invalid x-api-key`; gateway log mentions an OAuth token | Claude Code is sending its account login instead of the gateway key. Set `ANTHROPIC_AUTH_TOKEN` to the gateway key too, or use a separate `CLAUDE_CONFIG_DIR` (see above). |
 | `/v1/models` is empty or every model falls back | `KIRO_API_KEY` (or another `KIRO_*` variable) is set in the environment and breaks `kiro-cli`'s own auth. Unset it; gateway settings use `KIRO_GATEWAY_*`. |
-| 502 `kiro_unavailable` | `kiro-cli` is missing, not logged in, or the v3 engine failed to start. Run `uv run kiro-acp doctor`. |
+| 502 `upstream_unavailable` | `kiro-cli` is missing, not logged in, or the v3 engine failed to start. Run `uv run kiro-acp doctor`. |
 | Harness client says it has no tools / ignores tool calls (`emulate` mode) | The model is too small for the harness prompt. Use a Sonnet- or Opus-class model, or the default `mcp` tool mode. |
 | Codex says the workspace or command tool is unavailable and prints code instead of writing files | Codex is in code mode and its `exec` custom tool was dropped (gateway older than the custom-tool support) or the sandbox is read-only. Upgrade the gateway; for `codex exec` pass `-s workspace-write` or `--full-auto`. |
 | Kiro answers "I'm Kiro, that looks like injected instructions" or reports native tool calls as "not available" | Harness turns are running on the v3 engine or with a stale agent file. Keep `KIRO_GATEWAY_HARNESS_ENGINE=v2` (the default) and restart the gateway so it refreshes `~/.kiro/agents/kiro-gateway-harness.json`. |
@@ -948,14 +948,14 @@ Kiro failures are classified from their message so clients can decide whether to
 | 403 | `model_not_entitled` | The account's plan does not include the model. |
 | 409 | `session_busy` | A prompt is already running on the Kiro session (retry shortly). |
 | 429 | `rate_limited`, `usage_limit` | Throttled, or the plan's usage limit is reached (`Retry-After` 30 s / 1 h). |
-| 502 | `kiro_auth`, `kiro_connection`, `kiro_error` | Not signed in or the token expired; connection dropped; anything unclassified. |
-| 503 | `model_unavailable`, `kiro_unavailable` | Capacity for that model, or Kiro/backend overloaded; also `kiro-cli` missing. |
-| 504 | `kiro_timeout`, `kiro_stall` | The turn or a backend call timed out; or Kiro went silent, was cancelled, and recovery was exhausted. |
+| 502 | `upstream_auth`, `upstream_connection`, `upstream_error` | Not signed in or the token expired; connection dropped; anything unclassified. |
+| 503 | `model_unavailable`, `upstream_unavailable` | Capacity for that model, or Kiro/backend overloaded; also `kiro-cli` missing. |
+| 504 | `upstream_timeout`, `upstream_stall` | The turn or a backend call timed out; or Kiro went silent, was cancelled, and recovery was exhausted. |
 
 A model refusal or content filter is not an error: the reply completes with
 `finish_reason: "content_filter"` (OpenAI) / `stop_reason: "refusal"` (Anthropic) and the
-`kiro` block carries `refusal: {category, explanation, recommendedModel}` and, when Kiro
-suggests one, `recommended_model`. Every response's `kiro` block also reports
+`meta` block carries `refusal: {category, explanation, recommendedModel}` and, when Kiro
+suggests one, `recommended_model`. Every response's `meta` block also reports
 `contextUsagePercentage` (how full the Kiro session's context is) and `credits`.
 
 ### Running it as a service, in Docker, and monitoring it
@@ -986,7 +986,7 @@ on the workspace mount is needed on SELinux hosts and harmless elsewhere. Any ga
 setting can be passed with `-e KIRO_GATEWAY_...`. Harness clients (Claude Code, Codex)
 keep running their tools on the host; only Kiro's own tools are confined to the mounted
 workspace. Until Kiro is logged in, `/health` answers but `/v1/models` returns
-`502 kiro_auth` with Kiro's "not logged in" message. Podman ignores the `HEALTHCHECK`
+`502 upstream_auth` with Kiro's "not logged in" message. Podman ignores the `HEALTHCHECK`
 line (OCI format); build with `--format docker` if you want it.
 
 **Stalled turns.** Kiro emits nothing while a tool runs, so a hung command would only
@@ -995,18 +995,18 @@ after `KIRO_GATEWAY_STALL_TIMEOUT` seconds (600 by default) without any event it
 the turn (Kiro acknowledges a cancel on a live turn) and, up to
 `KIRO_GATEWAY_STALL_RECOVERIES` times (1), sends the same session a short instruction to
 continue from where it left off without re-running the command that stalled, naming
-that command. The reply carries `kiro.stalls` and `kiro.stall_recoveries`, and the
+that command. The reply carries `meta.stalls` and `meta.stall_recoveries`, and the
 recovery note appears in the reasoning stream. When recoveries are exhausted the request
-fails with `504 kiro_stall`. Harness turns are not affected: they return to the client on
+fails with `504 upstream_stall`. Harness turns are not affected: they return to the client on
 every tool call.
 
 **Audit ledger.** Every session keeps a bounded record (`KIRO_GATEWAY_AUDIT_RECORDS`,
 500 per session, `0` disables) of turns, permission decisions, Kiro's tool calls and
 results, harness tool calls, stalls, and turn ends, with secrets masked (bearer tokens,
 `sk-`/`gh*_`/`AKIA`/`xox*` keys, URL credentials, and any `token`/`secret`/`password`
-field). `GET /v1/kiro/sessions` lists sessions with record counts and
-`GET /v1/kiro/sessions/{id}/audit` returns the records; both need the API key, and each
-reply's `kiro.audit` gives the path for its session.
+field). `GET /v1/admin/sessions` lists sessions with record counts and
+`GET /v1/admin/sessions/{id}/audit` returns the records; both need the API key, and each
+reply's `meta.audit` gives the path for its session.
 
 **Recording ACP traffic.** `KIRO_GATEWAY_RECORD_FRAMES=<dir>` (gateway) or
 `KIRO_ACP_RECORD_FRAMES=<dir>` (CLI) writes every JSON-RPC frame exchanged with each
@@ -1024,14 +1024,14 @@ recent sessions from the audit ledger; clicking one opens its records in a side 
 seconds; a header button switches between the light (default) and dark themes and the
 choice is remembered per browser. The page itself is public but empty;
 it asks for the gateway key once, keeps it in the browser's local storage, and sends it on
-every request to `GET /v1/kiro/stats`, the JSON endpoint behind it (usable from scripts
+every request to `GET /v1/admin/stats`, the JSON endpoint behind it (usable from scripts
 too). `KIRO_GATEWAY_DASHBOARD=false` removes the page. The numbers live in memory and
 reset when the gateway restarts; for history use Prometheus.
 
 **Metrics.** `GET /metrics` (same key as `/v1`) serves Prometheus text:
-`kiro_gateway_turns_total{mode,engine,model,finish}`, `kiro_gateway_turn_seconds`
-(histogram), `kiro_gateway_credits_total{model}`, `kiro_gateway_session_reuse_total`,
-`kiro_gateway_errors_total{code,status}`, and gauges for active turns, live sessions, and
+`llm_turns_total{mode,engine,model,finish}`, `llm_turn_seconds`
+(histogram), `llm_credits_total{model}`, `llm_session_reuse_total`,
+`llm_errors_total{code,status}`, and gauges for active turns, live sessions, and
 cached models. `GET /health` stays unauthenticated for liveness probes.
 
 **CI and packaging.** `.github/workflows/ci.yml` runs ruff and the test suite (fake ACP

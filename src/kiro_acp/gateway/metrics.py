@@ -58,7 +58,7 @@ class Metrics:
             self.errors[(("code", code), ("status", str(status)))] += 1
 
     def snapshot(self) -> dict:
-        """Structured form of the counters for the dashboard (``/v1/kiro/stats``)."""
+        """Structured form of the counters for the dashboard (``/v1/admin/stats``)."""
 
         def rows(table: dict) -> list[dict]:
             return [{**dict(labels), "value": value} for labels, value in sorted(table.items())]
@@ -96,48 +96,44 @@ class Metrics:
 
         with self._lock:
             header(
-                "kiro_gateway_turns_total",
+                "llm_turns_total",
                 "counter",
                 "Completed turns by mode, engine, model, finish reason.",
             )
             for labels, value in sorted(self.turns.items()):
-                lines.append(f"kiro_gateway_turns_total{_fmt(labels)} {value}")
-            header("kiro_gateway_credits_total", "counter", "Kiro credits consumed, by model.")
+                lines.append(f"llm_turns_total{_fmt(labels)} {value}")
+            header("llm_credits_total", "counter", "Credits consumed, by model.")
             for labels, value in sorted(self.credits.items()):
-                lines.append(f"kiro_gateway_credits_total{_fmt(labels)} {value:.6f}")
+                lines.append(f"llm_credits_total{_fmt(labels)} {value:.6f}")
             header(
-                "kiro_gateway_session_reuse_total",
+                "llm_session_reuse_total",
                 "counter",
-                "Turns that reused a live Kiro session vs started one.",
+                "Turns that reused a live upstream session vs started one.",
             )
             for labels, value in sorted(self.reuse.items()):
-                lines.append(f"kiro_gateway_session_reuse_total{_fmt(labels)} {value}")
+                lines.append(f"llm_session_reuse_total{_fmt(labels)} {value}")
             header(
-                "kiro_gateway_errors_total",
+                "llm_errors_total",
                 "counter",
-                "API errors by gateway error code and HTTP status.",
+                "API errors by error code and HTTP status.",
             )
             for labels, value in sorted(self.errors.items()):
-                lines.append(f"kiro_gateway_errors_total{_fmt(labels)} {value}")
-            header("kiro_gateway_turn_seconds", "histogram", "Turn latency in seconds.")
+                lines.append(f"llm_errors_total{_fmt(labels)} {value}")
+            header("llm_turn_seconds", "histogram", "Turn latency in seconds.")
             for labels, buckets in sorted(self.latency_buckets.items()):
                 for index, bound in enumerate(_BUCKETS):
                     lines.append(
-                        f"kiro_gateway_turn_seconds_bucket{_fmt(labels + (('le', str(bound)),))} {buckets[index]}"
+                        f"llm_turn_seconds_bucket{_fmt(labels + (('le', str(bound)),))} {buckets[index]}"
                     )
                 lines.append(
-                    f"kiro_gateway_turn_seconds_bucket{_fmt(labels + (('le', '+Inf'),))} {self.latency_count[labels]}"
+                    f"llm_turn_seconds_bucket{_fmt(labels + (('le', '+Inf'),))} {self.latency_count[labels]}"
                 )
-                lines.append(
-                    f"kiro_gateway_turn_seconds_sum{_fmt(labels)} {self.latency_sum[labels]:.3f}"
-                )
-                lines.append(
-                    f"kiro_gateway_turn_seconds_count{_fmt(labels)} {self.latency_count[labels]}"
-                )
-        header("kiro_gateway_active_turns", "gauge", "Turns currently running.")
-        lines.append(f"kiro_gateway_active_turns {active_turns}")
-        header("kiro_gateway_live_sessions", "gauge", "Idle Kiro sessions kept for reuse.")
-        lines.append(f"kiro_gateway_live_sessions {live_sessions}")
-        header("kiro_gateway_models_cached", "gauge", "Models in the cached catalogue.")
-        lines.append(f"kiro_gateway_models_cached {models_cached}")
+                lines.append(f"llm_turn_seconds_sum{_fmt(labels)} {self.latency_sum[labels]:.3f}")
+                lines.append(f"llm_turn_seconds_count{_fmt(labels)} {self.latency_count[labels]}")
+        header("llm_active_turns", "gauge", "Turns currently running.")
+        lines.append(f"llm_active_turns {active_turns}")
+        header("llm_live_sessions", "gauge", "Idle upstream sessions kept for reuse.")
+        lines.append(f"llm_live_sessions {live_sessions}")
+        header("llm_models_cached", "gauge", "Models in the cached catalogue.")
+        lines.append(f"llm_models_cached {models_cached}")
         return "\n".join(lines) + "\n"

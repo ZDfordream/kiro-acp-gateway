@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kiro Gateway</title>
+<title>API Relay</title>
 <style>
   :root {
     --bg: #f3f5f8; --panel: #ffffff; --panel-2: #f8fafc; --text: #0f172a; --muted: #64748b; --line: #e2e8f0;
@@ -108,7 +108,7 @@
 <body>
 <header>
   <div class="bar-inner">
-    <div class="brand"><span class="mark">K</span>Kiro Gateway <span class="sub" id="version"></span></div>
+    <div class="brand"><span class="mark">R</span>API Relay <span class="sub" id="version"></span></div>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
     <span class="spacer"></span>
     <span class="muted" id="updated"></span>
@@ -122,22 +122,22 @@
 </header>
 
 <div id="login">
-  <h3>Connect to the gateway</h3>
-  <p>Enter the API key configured as <code>KIRO_GATEWAY_API_KEY</code>. It is stored in this browser only and sent as a bearer token to <code>/v1/kiro/stats</code>.</p>
-  <form id="loginForm"><input id="key" type="password" placeholder="Gateway API key" autocomplete="off"><button class="btn primary" type="submit">Connect</button></form>
+  <h3>Connect</h3>
+  <p>Enter the API key for this service. It is stored in this browser only and sent as a bearer token to the stats endpoint.</p>
+  <form id="loginForm"><input id="key" type="password" placeholder="API key" autocomplete="off"><button class="btn primary" type="submit">Connect</button></form>
   <div id="error"></div>
 </div>
 
 <main id="main" hidden>
   <section class="panel wide">
-    <div class="panel-head"><h2>Now</h2><span class="hint">in-memory counters since the gateway started</span></div>
+    <div class="panel-head"><h2>Now</h2><span class="hint">in-memory counters since the service started</span></div>
     <div class="gauges" id="gauges"></div>
     <div class="settings" id="settingsLine"></div>
   </section>
   <section class="panel wide"><div class="panel-head"><h2>Live sessions</h2><span class="hint" id="sessionsHint"></span></div><div id="sessions"></div></section>
   <section class="panel"><div class="panel-head"><h2>Turns</h2><span class="hint">by mode, model and finish reason</span></div><div id="turns"></div></section>
   <section class="panel"><div class="panel-head"><h2>Latency</h2><span class="hint">turn duration, seconds</span></div><div id="latency"></div></section>
-  <section class="panel"><div class="panel-head"><h2>Credits by model</h2><span class="hint">as metered by Kiro</span></div><div id="credits"></div></section>
+  <section class="panel"><div class="panel-head"><h2>Credits by model</h2><span class="hint">as metered upstream</span></div><div id="credits"></div></section>
   <section class="panel"><div class="panel-head"><h2>Errors</h2><span class="hint">API errors by code</span></div><div id="errors"></div></section>
   <section class="panel wide"><div class="panel-head"><h2>Recent sessions</h2><span class="hint">from the audit ledger; open a session for its records</span></div><div id="audit"></div></section>
 </main>
@@ -151,7 +151,7 @@
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
-  const KEY_STORE = "kiro-gateway-key", THEME_STORE = "kiro-gateway-theme";
+  const KEY_STORE = "relay-key", THEME_STORE = "relay-theme";
   let key = "", paused = false, timer = null;
   try { key = localStorage.getItem(KEY_STORE) || ""; } catch (e) {}
 
@@ -203,12 +203,12 @@
     $("gauges").innerHTML = gauges.map(([l, v, c]) => `<div class="gauge ${c}"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join("");
     $("settingsLine").innerHTML = [
       kv("engine", s.engine), kv("harness engine", s.harness_engine), kv("tool mode", s.tool_mode),
-      kv("permissions", s.permissions), kv("default model", s.default_model || "kiro"),
+      kv("permissions", s.permissions), kv("default model", s.default_model || "default"),
       kv("concurrency", s.max_concurrency), kv("session pool", `${s.max_sessions} × ${fmtDur(s.session_idle_ttl)} idle`),
       kv("workspace", s.workspace), ...(g.mcp_catalogue.length ? [kv("MCP catalogue", g.mcp_catalogue.join(", "))] : []),
     ].join("");
 
-    $("sessionsHint").textContent = d.sessions.length ? `${d.sessions.length} Kiro process${d.sessions.length === 1 ? "" : "es"} kept for reuse` : "";
+    $("sessionsHint").textContent = d.sessions.length ? `${d.sessions.length} session${d.sessions.length === 1 ? "" : "s"} kept for reuse` : "";
     $("sessions").innerHTML = table(
       ["State", "Mode", "Session", "Engine", "Model", "Agent", "Workspace", "Permissions", "Idle", "Age"],
       d.sessions.map(x => [
@@ -260,7 +260,7 @@
     $("drawerBody").innerHTML = '<p class="empty">Loading…</p>';
     $("drawer").classList.add("open"); $("drawerBack").classList.add("open");
     try {
-      const r = await fetch(`/v1/kiro/sessions/${encodeURIComponent(id)}/audit`, { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
+      const r = await fetch(`/v1/admin/sessions/${encodeURIComponent(id)}/audit`, { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
       if (!r.ok) throw new Error(r.status + " " + r.statusText);
       const data = await r.json();
       const skip = new Set(["time", "kind"]);
@@ -282,7 +282,7 @@
   async function refresh() {
     if (!key) { showLogin(""); return; }
     try {
-      const r = await fetch("/v1/kiro/stats", { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
+      const r = await fetch("/v1/admin/stats", { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
       if (r.status === 401) { showLogin("That key was rejected."); return; }
       if (!r.ok) throw new Error(r.status + " " + r.statusText);
       render(await r.json());

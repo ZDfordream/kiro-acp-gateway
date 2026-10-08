@@ -105,7 +105,7 @@ class GatewayError(Exception):
 # Ordered: the first matching pattern wins, so specific classes precede generic ones.
 # (pattern, HTTP status, API error type, code, Retry-After seconds)
 _ERROR_RULES: list[tuple[re.Pattern[str], int, str, str, int | None]] = [
-    (re.compile(r"stalled for"), 504, "api_error", "kiro_stall", None),
+    (re.compile(r"stalled for"), 504, "api_error", "upstream_stall", None),
     (re.compile(r"already in progress"), 409, "invalid_request_error", "session_busy", 2),
     (re.compile(r"invalid model id"), 400, "invalid_request_error", "invalid_model", None),
     (
@@ -163,10 +163,10 @@ _ERROR_RULES: list[tuple[re.Pattern[str], int, str, str, int | None]] = [
         ),
         503,
         "overloaded_error",
-        "kiro_unavailable",
+        "upstream_unavailable",
         10,
     ),
-    (re.compile(r"timed out|timeout|deadline"), 504, "api_error", "kiro_timeout", None),
+    (re.compile(r"timed out|timeout|deadline"), 504, "api_error", "upstream_timeout", None),
     (
         re.compile(
             r"unauthorized|not logged in|not signed in|not authenticated|expired ?token"
@@ -176,7 +176,7 @@ _ERROR_RULES: list[tuple[re.Pattern[str], int, str, str, int | None]] = [
         ),
         502,
         "api_error",
-        "kiro_auth",
+        "upstream_auth",
         None,
     ),
     (
@@ -186,7 +186,7 @@ _ERROR_RULES: list[tuple[re.Pattern[str], int, str, str, int | None]] = [
         ),
         502,
         "api_error",
-        "kiro_connection",
+        "upstream_connection",
         5,
     ),
 ]
@@ -198,14 +198,14 @@ def classify_kiro_error(message: str) -> tuple[int, str, str, int | None]:
     Classes, most specific first: ``session_busy`` (a prompt is already running on the
     session), ``invalid_model``, ``model_not_entitled``, ``usage_limit`` (plan quota),
     ``rate_limited``, ``model_unavailable`` (capacity for one model), ``malformed_request``,
-    ``kiro_unavailable``, ``kiro_timeout``, ``kiro_auth``, ``kiro_connection``; anything
-    else is ``kiro_error``.
+    ``upstream_unavailable``, ``upstream_timeout``, ``upstream_auth``, ``upstream_connection``;
+    anything else is ``upstream_error``.
     """
     lowered = message.lower()
     for pattern, status, error_type, code, retry_after in _ERROR_RULES:
         if pattern.search(lowered):
             return status, error_type, code, retry_after
-    return 502, "api_error", "kiro_error", None
+    return 502, "api_error", "upstream_error", None
 
 
 @dataclass(slots=True)
@@ -309,7 +309,7 @@ class KiroBackend:
         if not self.settings.harness_workspace:
             # Harness turns: the client executes every tool, so Kiro's cwd only matters
             # for what it auto-loads (README, AGENTS.md, steering). Give it nothing.
-            self._harness_dir = tempfile.mkdtemp(prefix="kiro-gateway-harness-")
+            self._harness_dir = tempfile.mkdtemp(prefix="agent-harness-")
         if self.settings.tool_mode == "mcp":
             self.bridge_broker = ToolBridgeBroker()
             await self.bridge_broker.start()
@@ -535,7 +535,7 @@ class KiroBackend:
                 if not self.settings.allow_request_mcp_servers:
                     raise GatewayError(
                         "Inline MCP server definitions are disabled "
-                        "(KIRO_GATEWAY_ALLOW_REQUEST_MCP_SERVERS); use a catalogue name",
+                        "on this deployment; use a catalogue name",
                         status=403,
                         error_type="permission_error",
                         code="mcp_server_not_allowed",
@@ -639,7 +639,7 @@ class KiroBackend:
             if bridge is not None:
                 self.bridge_broker.unregister(bridge)
             if "Unknown" in str(error):
-                raise GatewayError(str(error), status=400, code="kiro_error") from error
+                raise GatewayError(str(error), status=400, code="upstream_error") from error
             raise GatewayError.from_kiro(str(error)) from error
         except ACPError as error:
             await agent.close()
@@ -741,7 +741,7 @@ class KiroBackend:
         if opts.permissions:
             if not self.settings.allow_permission_override:
                 raise GatewayError(
-                    "Permission overrides are disabled (KIRO_GATEWAY_ALLOW_PERMISSION_OVERRIDE)",
+                    "Permission overrides are disabled on this deployment",
                     status=403,
                     error_type="permission_error",
                 )
@@ -806,7 +806,7 @@ class KiroBackend:
             candidate = os.path.realpath(os.path.expanduser(opts.workspace))
             if not self.settings.allowed_workspaces and candidate != self.settings.workspace:
                 raise GatewayError(
-                    "Per-request workspaces are disabled (set KIRO_GATEWAY_ALLOWED_WORKSPACES)",
+                    "Per-request workspaces are disabled on this deployment",
                     status=403,
                     error_type="permission_error",
                     code="workspace_not_allowed",
@@ -819,7 +819,7 @@ class KiroBackend:
                 )
             if not self.settings.workspace_allowed(candidate):
                 raise GatewayError(
-                    f"Workspace {candidate} is not in KIRO_GATEWAY_ALLOWED_WORKSPACES",
+                    f"Workspace {candidate} is not in the allowed workspaces list",
                     status=403,
                     error_type="permission_error",
                     code="workspace_not_allowed",
@@ -829,14 +829,14 @@ class KiroBackend:
         if opts.inline_agent is not None:
             if not self.settings.allow_request_agents:
                 raise GatewayError(
-                    "Inline agent definitions are disabled (KIRO_GATEWAY_ALLOW_REQUEST_AGENTS)",
+                    "Inline agent definitions are disabled on this deployment",
                     status=403,
                     error_type="permission_error",
                     code="agent_not_allowed",
                 )
             if self.engine_for(opts) != "v3":
                 raise GatewayError(
-                    "Inline agent definitions need the v3 engine (KIRO_GATEWAY_ENGINE=v3)",
+                    "Inline agent definitions need the v3 engine",
                     status=400,
                     code="agent_requires_v3",
                 )
@@ -857,7 +857,7 @@ class KiroBackend:
             )
         except TimeoutError as error:
             raise GatewayError(
-                f"All {self.settings.max_concurrency} Kiro turn slots are busy; try again later",
+                f"All {self.settings.max_concurrency} turn slots are busy; try again later",
                 status=503,
                 error_type="overloaded_error",
                 code="busy",
@@ -920,7 +920,7 @@ class KiroBackend:
             if opts.mcp_servers:
                 kiro_meta["mcp_servers"] = [s["name"] for s in opts.mcp_servers]
             if self.audit.enabled:
-                kiro_meta["audit"] = f"/v1/kiro/sessions/{session.session_id}/audit"
+                kiro_meta["audit"] = f"/v1/admin/sessions/{session.session_id}/audit"
             finish = "stop"
             error: str | None = None
             completed = False
@@ -1117,7 +1117,7 @@ class KiroBackend:
             "tool_mode": "mcp",
         }
         if self.audit.enabled:
-            kiro_meta["audit"] = f"/v1/kiro/sessions/{session.session_id}/audit"
+            kiro_meta["audit"] = f"/v1/admin/sessions/{session.session_id}/audit"
         limiter = StreamLimiter(
             stop_sequences=[seq for seq in opts.stop_sequences if seq],
             max_tokens=opts.max_tokens if self.settings.enforce_max_tokens else None,
@@ -1605,7 +1605,7 @@ class KiroBackend:
     def health(self) -> JSON:
         return {
             "status": "ok" if self.started else "starting",
-            "backend": "kiro-cli-acp",
+            "backend": "cli-acp",
             "engine": self.settings.engine,
             "workspace": self.settings.workspace,
             "permissions": self.settings.permissions,
@@ -1680,7 +1680,7 @@ def check_image_sizes(conversation: Conversation, max_bytes: int) -> None:
             if decoded > max_bytes:
                 raise GatewayError(
                     f"Image input of about {decoded // 1024} KB exceeds the limit of "
-                    f"{max_bytes // 1024} KB (KIRO_GATEWAY_MAX_IMAGE_BYTES)",
+                    f"{max_bytes // 1024} KB",
                     status=400,
                     error_type="invalid_request_error",
                     code="image_too_large",

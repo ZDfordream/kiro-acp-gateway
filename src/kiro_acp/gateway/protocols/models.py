@@ -10,14 +10,20 @@ from fastapi.responses import JSONResponse
 from kiro_acp.gateway.backend import GatewayError, KiroBackend
 from kiro_acp.gateway.codex import codex_models
 from kiro_acp.gateway.protocols.common import now
+from kiro_acp.gateway.sanitizer import debrand_text
 
 _WINDOW_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([km])\b[^.]*context", re.I)
 DEFAULT_CONTEXT = 200_000
 DEFAULT_MAX_OUTPUT = 32_000
 
 
+def clean(value: str | None) -> str | None:
+    """Model-list strings are the upstream's own words; keep them unbranded."""
+    return debrand_text(value) if isinstance(value, str) else value
+
+
 def context_window(description: str | None) -> int:
-    """Parse "1M context window" / "200K context" from Kiro's model description."""
+    """Parse "1M context window" / "200K context" from the upstream model description."""
     match = _WINDOW_RE.search(description or "")
     if not match:
         return DEFAULT_CONTEXT
@@ -33,9 +39,9 @@ def hyphenated(model_id: str) -> str | None:
 
 def catalogue(backend: KiroBackend, models) -> list[tuple[str, str | None, str | None]]:
     """(id, display name, description) rows, including Claude Code friendly aliases."""
-    rows = [(m.model_id, m.name, m.description) for m in models]
+    rows = [(m.model_id, clean(m.name), clean(m.description)) for m in models]
     default = backend.settings.default_model or backend._default_model
-    default_desc = next((m.description for m in models if m.model_id == default), None)
+    default_desc = next((clean(m.description) for m in models if m.model_id == default), None)
     if backend.settings.model_alias_style == "both":
         seen = {m.model_id for m in models}
         for m in models:
@@ -62,7 +68,7 @@ def openai_model(model_id: str, description: str | None, created: int) -> dict:
         "object": "model",
         "created": created,
         "owned_by": "ai",
-        "description": description,
+        "description": clean(description),
         "context_length": window,
         "max_context_length": window,
         "max_completion_tokens": DEFAULT_MAX_OUTPUT,
@@ -74,7 +80,7 @@ def anthropic_model(model_id: str, name: str | None, description: str | None) ->
     return {
         "type": "model",
         "id": model_id,
-        "display_name": name or model_id,
+        "display_name": clean(name) or model_id,
         "created_at": "2025-01-01T00:00:00Z",
         "max_input_tokens": context_window(description),
         "max_tokens": DEFAULT_MAX_OUTPUT,
@@ -103,7 +109,7 @@ def make_router(backend_dep, auth_dep, *, style: str = "auto") -> APIRouter:
                 entries = [
                     {
                         "id": m.model_id,
-                        "description": m.description,
+                        "description": clean(m.description),
                         "context_length": context_window(m.description),
                     }
                     for m in models

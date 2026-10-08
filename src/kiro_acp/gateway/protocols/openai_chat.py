@@ -40,6 +40,7 @@ from kiro_acp.gateway.protocols.common import (
     stream_error_body,
     text_of_content,
 )
+from kiro_acp.gateway.sanitizer import wire_meta
 from kiro_acp.gateway.turn import OutputDone, OutputText, OutputThought, OutputToolCall
 
 LOG = logging.getLogger("kiro_acp.gateway.openai_chat")
@@ -366,7 +367,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                 }
             ],
             "usage": usage_json(done.usage),
-            "kiro": done.kiro,
+            **wire_meta(done.kiro),
         }
         return JSONResponse(response)
 
@@ -426,7 +427,7 @@ async def stream_chat(
                                 "model": model,
                                 "choices": [],
                                 "usage": usage_json(usage),
-                                "kiro": kiro,
+                                **wire_meta(kiro),
                             }
                             yield sse(payload)
     except GatewayError as error:

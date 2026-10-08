@@ -23,6 +23,7 @@ from kiro_acp.gateway.protocols.common import (
     stream_error_body,
 )
 from kiro_acp.gateway.protocols.openai_chat import finish_reason, usage_json
+from kiro_acp.gateway.sanitizer import wire_meta
 from kiro_acp.gateway.turn import OutputDone, OutputText
 
 LOG = logging.getLogger("kiro_acp.gateway.openai_completions")
@@ -103,7 +104,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                     }
                 ],
                 "usage": usage_json(done.usage),
-                "kiro": done.kiro,
+                **wire_meta(done.kiro),
             }
         )
 

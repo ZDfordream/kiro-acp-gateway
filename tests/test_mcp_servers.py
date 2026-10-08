@@ -75,7 +75,7 @@ def test_inline_agent_parsing() -> None:
     entry = parse_inline_agent({"prompt": "Hi", "name": "bot"})
     assert entry == {"prompt": "Hi", "tools": ["*"], "description": "bot"}
     wire = custom_agent(entry, mcp_servers={"s": {"command": "x"}})
-    assert wire["id"].startswith("gateway-inline-") and wire["tools"] == ["*", "@s"]
+    assert wire["id"].startswith("inline-") and wire["tools"] == ["*", "@s"]
     assert wire["mcpServers"] == {"s": {"command": "x"}}
     for bad in ({}, {"prompt": ""}, {"prompt": "x", "tools": "read"}, "nope"):
         with pytest.raises(InlineAgentError):

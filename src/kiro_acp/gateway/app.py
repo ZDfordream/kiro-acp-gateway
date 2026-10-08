@@ -57,12 +57,15 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
         finally:
             await backend.stop()
 
+    # No docs surface: an OpenAPI page would name the relay and its routes to anyone
+    # who can reach the port. Operators use the README instead.
     app = FastAPI(
-        title="Kiro ACP Gateway",
+        title="API Relay",
         version=__version__,
         lifespan=lifespan,
-        docs_url="/docs",
+        docs_url=None,
         redoc_url=None,
+        openapi_url=None,
     )
     app.state.settings = settings
     app.state.backend = backend
@@ -159,11 +162,11 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
 
     if settings.audit_records > 0:
 
-        @app.get("/v1/kiro/sessions", dependencies=[Depends(authorize)])
+        @app.get("/v1/admin/sessions", dependencies=[Depends(authorize)])
         async def audit_sessions():
             return {"object": "list", "data": backend.audit.sessions()}
 
-        @app.get("/v1/kiro/sessions/{session_id}/audit", dependencies=[Depends(authorize)])
+        @app.get("/v1/admin/sessions/{session_id}/audit", dependencies=[Depends(authorize)])
         async def audit_session(session_id: str):
             data = backend.audit.session(session_id)
             if data is None:
@@ -182,7 +185,7 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
         async def dashboard():
             return HTMLResponse(page)
 
-    @app.get("/v1/kiro/stats", dependencies=[Depends(authorize)])
+    @app.get("/v1/admin/stats", dependencies=[Depends(authorize)])
     async def stats():
         return backend.stats()
 
@@ -213,7 +216,7 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
 
         async def not_implemented(request: Request, rest: str = ""):
             raise GatewayError(
-                f"{request.url.path} is not supported: this gateway only relays chat, responses, completions, and messages to Kiro",
+                f"{request.url.path} is not supported: only chat, responses, completions, and messages are accepted",
                 status=501,
                 error_type="not_supported_error",
                 code="not_implemented",
@@ -224,7 +227,7 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
     @app.get("/")
     async def index():
         return {
-            "name": "kiro-acp-gateway",
+            "name": "api-relay",
             "version": __version__,
             "endpoints": [
                 "/v1/chat/completions",
@@ -233,8 +236,6 @@ def create_app(settings: Settings | None = None, *, backend: KiroBackend | None 
                 "/v1/messages",
                 "/v1/messages/count_tokens",
                 "/v1/models",
-                "/v1/kiro/stats",
-                "/dashboard",
                 "/health",
             ],
         }

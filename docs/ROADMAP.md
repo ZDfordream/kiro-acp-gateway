@@ -100,7 +100,7 @@ Enables one gateway to serve several projects in agent mode without weakening th
 ### 12. Structured-output validation — DONE — S
 When `response_format` / `output_config.format` carries a JSON schema, validate the reply
 (after fence stripping) and, on failure, retry once with the validation error appended, then
-return the best effort with `kiro.schema_valid=false`.
+return the best effort with `meta.schema_valid=false`.
 
 ### 13. Token usage from Kiro when available — S
 v3's `session_info_update` context breakdown includes token counts for context files;
@@ -113,7 +113,7 @@ estimates, keeping `usage.estimated` accurate.
 Prometheus `/metrics` (turns by mode/engine/model, latency, credits, active sessions,
 pool hits) and optional OpenTelemetry spans per turn with the Kiro session id. Propagate
 `traceparent` into ACP `_meta` per the spec's reserved keys.
-*Done (2026-09-17):* Prometheus `/metrics` with turns, latency histogram, credits, session reuse, errors, and gauges; plus a self-contained live dashboard at `/dashboard` over `GET /v1/kiro/stats` (live sessions, turns, latency, credits, errors, audit feed); no OpenTelemetry (no dependency wanted) and no `traceparent` propagation yet.
+*Done (2026-09-17):* Prometheus `/metrics` with turns, latency histogram, credits, session reuse, errors, and gauges; plus a self-contained live dashboard at `/dashboard` over `GET /v1/admin/stats` (live sessions, turns, latency, credits, errors, audit feed); no OpenTelemetry (no dependency wanted) and no `traceparent` propagation yet.
 
 ### 15. Rate limiting and queue timeouts — DONE — S
 Per-key request rate limit and a bounded wait for a concurrency slot
@@ -137,7 +137,7 @@ Add a `Dockerfile` that installs kiro-cli and runs the gateway bound to `0.0.0.0
 mounted workspace, as the recommended isolation story.
 
 ## P5 — Additional things to concider if they improve the gateway
-*Done (2026-09-17):* GitHub Actions matrix (Linux/macOS, 3.11–3.13) with ruff, pytest, `uv build` artifacts, optional self-hosted integration job; `Dockerfile` + `.dockerignore`, built and run with Podman 5.8 (arm64): kiro-cli 2.22 inside, `/health` up, unauthenticated Kiro reported as `502 kiro_auth`.
+*Done (2026-09-17):* GitHub Actions matrix (Linux/macOS, 3.11–3.13) with ruff, pytest, `uv build` artifacts, optional self-hosted integration job; `Dockerfile` + `.dockerignore`, built and run with Podman 5.8 (arm64): kiro-cli 2.22 inside, `/health` up, unauthenticated Kiro reported as `502 upstream_auth`.
 
 ### 19. Richer rendering of Kiro's own tool activity *(pattern)* — DONE — S
 Our `tool_activity` lines are just `[kiro:kind] title`. Theirs render arguments as
@@ -156,9 +156,9 @@ window"); parse that into `context_length` (default 200k when absent) and add
 ### 21. Tool-execution audit ledger with redaction *(pattern)* — DONE — M
 Per-session bounded record of permission decisions, tool calls, updates, and cancel
 races, with secrets masked (bearer tokens, `sk-`/`gh*_`/`AKIA` keys, URL credentials).
-Expose as `GET /v1/kiro/sessions/{id}/audit` behind the API key and reference it from
-the `kiro` response field. Complements #14 (metrics).
-*Done (2026-09-17):* `gateway/audit.py` ledger (turns, permissions, tool calls/results, harness calls, stalls) with redaction; `GET /v1/kiro/sessions` and `/v1/kiro/sessions/{id}/audit`; `kiro.audit` in every reply.
+Expose as `GET /v1/admin/sessions/{id}/audit` behind the API key and reference it from
+the `meta` response field. Complements #14 (metrics).
+*Done (2026-09-17):* `gateway/audit.py` ledger (turns, permissions, tool calls/results, harness calls, stalls) with redaction; `GET /v1/admin/sessions` and `/v1/admin/sessions/{id}/audit`; `meta.audit` in every reply.
 
 ### 22. MCP servers per request and harness MCP discovery *(extends #10)* — DONE — M
 Accept `X-Kiro-MCP-Servers` / body `mcp_servers` (validated against an allow-list) in
@@ -166,7 +166,7 @@ addition to config-file discovery for Claude Code (`~/.claude.json` projects,
 `<ws>/.mcp.json`), OpenCode (`opencode.json[c]` `mcp` block), Cursor/VS Code
 (`.cursor/mcp.json`, `.vscode/mcp.json`), and Kilo. Agent mode only; harness mode keeps
 the tool-less agent. Normalize HTTP entries (`type: "http"`, `headers` as an array).
-*Done (2026-09-17):* `KIRO_GATEWAY_MCP_SERVERS` catalogue, `X-Kiro-MCP-Servers` / `kiro.mcp_servers`, defaults, discovery, inline definitions behind `KIRO_GATEWAY_ALLOW_REQUEST_MCP_SERVERS`; sessions pooled per server set. Verified live: a probe MCP server's tool was called on v2 and v3.
+*Done (2026-09-17):* `KIRO_GATEWAY_MCP_SERVERS` catalogue, `X-Kiro-MCP-Servers` / `meta.mcp_servers`, defaults, discovery, inline definitions behind `KIRO_GATEWAY_ALLOW_REQUEST_MCP_SERVERS`; sessions pooled per server set. Verified live: a probe MCP server's tool was called on v2 and v3.
 
 ### 23. Client example configurations *(pattern)* — DONE — S
 An `examples/clients/` directory with ready-to-use configs and a one-line verification
@@ -245,9 +245,9 @@ provisioning for v2, which only takes `--agent <name>` at launch.
 `_kiro.dev/metadata` can carry `stopReason: "CONTENT_FILTERED"` and
 `refusal: {category, explanation, recommendedModel}`. Map it to OpenAI
 `finish_reason: "content_filter"` / Anthropic `stop_reason: "refusal"`, never retry it,
-and expose `recommendedModel` under `kiro`. Today the fields ride along in metadata
+and expose `recommendedModel` under `meta`. Today the fields ride along in metadata
 untyped.
-*Done (2026-09-17):* `detect_refusal` maps `CONTENT_FILTERED`/`refusal` metadata to the `refusal` finish reason on both turn paths; `kiro.refusal` and `kiro.recommended_model` are exposed.
+*Done (2026-09-17):* `detect_refusal` maps `CONTENT_FILTERED`/`refusal` metadata to the `refusal` finish reason on both turn paths; `meta.refusal` and `meta.recommended_model` are exposed.
 
 ### 32. Finer Kiro error classification — DONE — S
 Their raw-error classifier (`acp/client.py` ~2612-2800) distinguishes, in precedence
@@ -275,7 +275,7 @@ on a live turn too, so a probe-induced `cancelled` is reclassified as `stale_rec
 on recovery send a short continue-nudge naming the stalled tool instead of re-sending
 the prompt (re-sending re-ran the command that stalled). Applies to agent-mode turns;
 harness turns already return on each tool call.
-*Done (2026-09-17):* Pump-and-watchdog in `KiroBackend._turn_events`: silence > `KIRO_GATEWAY_STALL_TIMEOUT` cancels the turn and sends a continue-nudge naming the stalled tool (up to `KIRO_GATEWAY_STALL_RECOVERIES`), else `504 kiro_stall`. Verified live on Kiro 2.22 v3: a foreground `sleep 40` was cancelled at 8 s and the model continued.
+*Done (2026-09-17):* Pump-and-watchdog in `KiroBackend._turn_events`: silence > `KIRO_GATEWAY_STALL_TIMEOUT` cancels the turn and sends a continue-nudge naming the stalled tool (up to `KIRO_GATEWAY_STALL_RECOVERIES`), else `504 upstream_stall`. Verified live on Kiro 2.22 v3: a foreground `sleep 40` was cancelled at 8 s and the model continued.
 
 ### 35. Process hygiene — DONE — S
 Spawn `kiro-cli` with `start_new_session=True` (POSIX) / `CREATE_NEW_PROCESS_GROUP`
@@ -301,12 +301,12 @@ tests. Extend the fake agent with `permission`, `gated`, `slow-noack`, `refusal`
 
 ### 38. Context usage and compaction for affinity sessions — PARTLY DONE — S/M
 Expose `contextUsagePercentage` (v2 metadata, v3 `session_info_update`
-`context_usage`) in every response's `kiro` block and in `kiro-acp chat`. For agent-mode
+`context_usage`) in every response's `meta` block and in `kiro-acp chat`. For agent-mode
 affinity sessions add an opt-in auto-compaction: send `/compact` as a prompt when usage
 crosses a threshold and wait for `_kiro.dev/compaction/status`; a fresh metadata frame
 follows about a second later. Harness clients manage their own context, so leave them
 alone.
-*2026-09-17:* `contextUsagePercentage` and `credits` are already in every response's `kiro` block (documented). Auto-compaction for affinity sessions remains open.
+*2026-09-17:* `contextUsagePercentage` and `credits` are already in every response's `meta` block (documented). Auto-compaction for affinity sessions remains open.
 
 ### 39. Trusted tool identity in rules and activity — DONE — S
 `tool_call._meta.kiro.toolName` is the real `@server/tool` identity and

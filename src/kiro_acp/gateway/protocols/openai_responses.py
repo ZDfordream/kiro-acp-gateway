@@ -40,6 +40,7 @@ from kiro_acp.gateway.protocols.common import (
     text_of_content,
 )
 from kiro_acp.gateway.protocols.openai_chat import parse_arguments
+from kiro_acp.gateway.sanitizer import wire_meta
 from kiro_acp.gateway.turn import OutputDone, OutputText, OutputThought, OutputToolCall
 
 LOG = logging.getLogger("kiro_acp.gateway.openai_responses")
@@ -480,7 +481,7 @@ def finalize(
         output.append(call_item(new_id(prefix), call, custom))
     response["output"] = output
     response["usage"] = usage_json(done.usage, reasoning_tokens=len(thoughts) // 4)
-    response["kiro"] = done.kiro
+    response.update(wire_meta(done.kiro))
     if done.finish == "length":
         response["status"] = "incomplete"
         response["incomplete_details"] = {"reason": "max_output_tokens"}
@@ -722,7 +723,7 @@ async def stream_response(
                             empty_id = new_id("msg_")
                             response["output"].append(message_item(empty_id, ""))
                         response["usage"] = usage_json(usage, reasoning_tokens=len(thoughts) // 4)
-                        response["kiro"] = kiro
+                        response.update(wire_meta(kiro))
                         if finish == "length":
                             response["status"] = "incomplete"
                             response["incomplete_details"] = {"reason": "max_output_tokens"}

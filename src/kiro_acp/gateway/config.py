@@ -126,7 +126,7 @@ class Settings(BaseSettings):
     )
     dashboard: bool = Field(
         default=True,
-        description="Serve the live dashboard page at /dashboard (its data comes from /v1/kiro/stats, which needs the API key)",
+        description="Serve the live dashboard page at /dashboard (its data comes from /v1/admin/stats, which needs the API key)",
     )
 
     # --- HTTP ----------------------------------------------------------------

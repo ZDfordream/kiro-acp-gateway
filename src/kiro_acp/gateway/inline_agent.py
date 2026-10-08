@@ -46,7 +46,7 @@ def parse_inline_agent(raw: Any) -> JSON:
 
 def agent_id(entry: JSON) -> str:
     digest = hashlib.sha1(json.dumps(entry, sort_keys=True).encode()).hexdigest()[:10]
-    return f"gateway-inline-{digest}"
+    return f"inline-{digest}"
 
 
 def custom_agent(entry: JSON, *, mcp_servers: JSON | None = None) -> JSON:
