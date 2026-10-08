@@ -897,6 +897,7 @@ class KiroBackend:
                 emulate_tools=opts.emulate_tools,
                 sanitize=self.settings.sanitize_system,
                 image_capable=image_capable(pooled.agent),
+                model=session.model_id,
             )
             parser = ToolCallParser(enabled=opts.emulate_tools)
             limiter = StreamLimiter(
@@ -1184,6 +1185,7 @@ class KiroBackend:
                 emulate_tools=False,
                 sanitize=self.settings.sanitize_system,
                 image_capable=image_capable(pooled.agent),
+                model=session.model_id,
             )
             pending = PendingTurn(session=session, bridge=pooled.bridge)
             pending.start(blocks, timeout=0)

@@ -23,7 +23,17 @@ LOG = logging.getLogger("kiro_acp.gateway.prompting")
 HARNESS_PREAMBLE = (
     "This is an API request from an external coding tool. Answer the "
     "conversation below on the tool's behalf. Output only your reply: no role labels, no tags, "
-    "no commentary about this request's structure. If asked what you are or what model you are, reply with exactly one sentence — 'I'm an AI assistant, a large language model.' — then continue with the task. For every other message, including greetings, answer directly and briefly: no self-introduction, no identity line. Never mention what you run inside, what app or environment you are part of, what serves you, or how requests reach you, and never say those things cannot be discussed. There is nothing else on that topic to say."
+    "no commentary about this request's structure."
+)
+
+# How to answer identity questions. The concrete model id comes from the request, so
+# "what model are you" gets the model's name the way a CLI reports its own — one short
+# line, nothing else. Greetings never get an identity line.
+_IDENTITY_GUARD = (
+    "For every other message, including greetings, answer directly and briefly: no "
+    "self-introduction, no identity line. Never mention what you run inside, what app or "
+    "environment you are part of, what serves you, or how requests reach you, and never say "
+    "those things cannot be discussed. There is nothing else on that topic to say."
 )
 
 TRANSCRIPT_NOTE = (
@@ -32,10 +42,28 @@ TRANSCRIPT_NOTE = (
 )
 
 
+def identity_guidance(model: str | None) -> str:
+    """Identity answer for this turn: the model's id when known, else the neutral line."""
+    if model:
+        return (
+            f"If asked what model you are, reply with just the model id in one short line "
+            f"(e.g. 'I'm {model}' or '我是 {model}') and nothing else. If asked who you are, "
+            f"one short line naming that model is enough. {_IDENTITY_GUARD}"
+        )
+    return (
+        "If asked what model you are or who you are, say only 'I'm an AI assistant, "
+        f"a large language model.' {_IDENTITY_GUARD}"
+    )
+
+
 def build_system_text(
-    conversation: Conversation, *, emulate_tools: bool, sanitize: bool = False
+    conversation: Conversation,
+    *,
+    emulate_tools: bool,
+    sanitize: bool = False,
+    model: str | None = None,
 ) -> str:
-    sections: list[str] = [HARNESS_PREAMBLE]
+    sections: list[str] = [HARNESS_PREAMBLE + " " + identity_guidance(model)]
     system = conversation.system.strip()
     if system and sanitize:
         system, removed = sanitize_system(system)
@@ -100,19 +128,23 @@ def render_prompt(
     emulate_tools: bool,
     sanitize: bool = False,
     image_capable: bool = True,
+    model: str | None = None,
 ) -> list[JSON]:
     """Build ``session/prompt`` blocks for messages ``conversation.messages[start:]``.
 
     ``include_system`` is true for a fresh session (the system text and, when
     ``start > 0``, a transcript of the earlier messages are prepended). When the agent
     did not advertise image input (``image_capable``), images become a short note
-    instead of a block the agent would reject.
+    instead of a block the agent would reject. ``model`` is the id this turn runs on;
+    it is what "what model are you" is answered with.
     """
     blocks: list[JSON] = []
     sections: list[str] = []
     if include_system:
         sections.append(
-            build_system_text(conversation, emulate_tools=emulate_tools, sanitize=sanitize)
+            build_system_text(
+                conversation, emulate_tools=emulate_tools, sanitize=sanitize, model=model
+            )
         )
     messages = conversation.messages
     if include_system and start > 0:

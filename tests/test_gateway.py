@@ -318,14 +318,22 @@ def test_harness_prompts_and_preamble_hide_infra() -> None:
         assert "gateway" not in prompt.lower()
         assert "prompt injection" in prompt  # anti-refusal framing is kept
         assert "<operator_instructions>" in prompt and "<conversation>" in prompt
-        assert "If asked what you are" in prompt and "including greetings" in prompt
+        assert "If asked what model you are" in prompt and "including greetings" in prompt
     text = build_system_text(Conversation(system="You are helpful."), emulate_tools=False)
     assert "kiro" not in text.lower() and "gateway" not in text.lower()
-    assert "AI assistant" in text  # identity-question guidance
-    # The canned identity sentence is for identity questions only; greetings and
-    # ordinary messages get a direct, brief reply without one.
-    assert "If asked what you are" in text
-    assert "including greetings" in text
+    assert "AI assistant" in text  # fallback identity guidance without a model id
+    assert "including greetings" in text  # greetings never get an identity line
+
+
+def test_identity_answer_names_the_current_model() -> None:
+    from kiro_acp.gateway.conversation import Conversation
+    from kiro_acp.gateway.prompting import build_system_text
+
+    text = build_system_text(Conversation(system=""), emulate_tools=False, model="claude-sonnet-5")
+    # "What model are you" is answered with the model id, Claude-Code style.
+    assert "I'm claude-sonnet-5" in text and "我是 claude-sonnet-5" in text
+    assert "a large language model" not in text
+    assert "If asked what model you are" in text and "including greetings" in text
 
 
 async def test_text_after_tool_call_is_dropped(client: httpx.AsyncClient) -> None:
