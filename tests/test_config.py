@@ -22,3 +22,11 @@ def test_list_settings_parse_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path)
     (tmp_path / "c").mkdir()
     assert not settings.workspace_allowed(str(tmp_path / "c"))  # not matched by any pattern
     assert settings.workspace_allowed(str(tmp_path))  # the default workspace is always allowed
+
+
+def test_scrub_identity_defaults_on_and_is_env_switchable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    assert Settings(_env_file=None, workspace=str(tmp_path)).scrub_identity is True
+    monkeypatch.setenv("KIRO_GATEWAY_SCRUB_IDENTITY", "false")
+    assert Settings(_env_file=None, workspace=str(tmp_path)).scrub_identity is False

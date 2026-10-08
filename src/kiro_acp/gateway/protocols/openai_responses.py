@@ -385,7 +385,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
         )
         response_id = new_id("resp_")
         created = now()
-        response = base_response(response_id, created, model_name or model or "kiro", body)
+        response = base_response(response_id, created, model_name or model or "ai", body)
         store = body.get("store", True) is not False
 
         if body.get("stream"):
@@ -411,7 +411,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                         done = event
         assert done is not None
         if done.finish == "error":
-            raise GatewayError.from_kiro(done.error or "Kiro turn failed")
+            raise GatewayError.from_kiro(done.error or "Model turn failed")
         text, thoughts, calls = done.text, done.thoughts, done.tool_calls
         finalize(
             response,
@@ -708,13 +708,13 @@ async def stream_response(
                             response["status"] = "failed"
                             response["error"] = {
                                 "code": "server_error",
-                                "message": error or "Kiro turn failed",
+                                "message": error or "Model turn failed",
                             }
                             yield emit("response.failed", response=response)
                             yield emit(
                                 "error",
                                 code="server_error",
-                                message=error or "Kiro turn failed",
+                                message=error or "Model turn failed",
                                 param=None,
                             )
                             return

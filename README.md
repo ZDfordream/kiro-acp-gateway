@@ -895,6 +895,7 @@ the working directory is also read). The most important ones:
 | `KIRO_GATEWAY_ENFORCE_MAX_TOKENS` | `false` | Cut output at the request's `max_tokens` using the token estimator. `stop` sequences are always enforced. |
 | `KIRO_GATEWAY_MODEL_ALIAS_STYLE` | `both` | Also list hyphenated ids (`claude-sonnet-4-6`) and `claude-auto`/`auto`; `native` lists Kiro ids only. |
 | `KIRO_GATEWAY_SANITIZE_SYSTEM` | `false` | Strip identity and concealment lines from client system prompts (defensive second layer). |
+| `KIRO_GATEWAY_SCRUB_IDENTITY` | `true` | Hide upstream identity in user-facing answers: neutral model-visible prompts, and replace product/infrastructure names in assistant output (fenced code blocks are never touched). |
 | `KIRO_GATEWAY_TOOL_MODE` | `mcp` | What to do with client tool definitions: `mcp` (native calls via a bridged MCP server), `emulate` (tagged-block prompting), `ignore` (drop them and run agent mode), or `reject` (400). |
 | `KIRO_GATEWAY_HARNESS_AGENT_MCP` | `kiro-gateway-harness-mcp` | Kiro agent used in `mcp` mode (`tools: ["@harness"]`). |
 | `KIRO_GATEWAY_MCP_BATCH_WINDOW` | `0.5` | Seconds to collect parallel tool calls before answering the client. |

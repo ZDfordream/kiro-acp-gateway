@@ -67,7 +67,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
         completion_id = new_id("cmpl-")
         created = now()
         echo = bool(body.get("echo"))
-        display_model = model_name or model or "kiro"
+        display_model = model_name or model or "ai"
 
         if body.get("stream"):
             return sse_response(
@@ -87,7 +87,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                     done = event
         assert done is not None
         if done.finish == "error":
-            raise GatewayError.from_kiro(done.error or "Kiro turn failed")
+            raise GatewayError.from_kiro(done.error or "Model turn failed")
         return JSONResponse(
             {
                 "id": completion_id,
@@ -140,7 +140,7 @@ async def stream_completion(
                     yield chunk(event.text)
                 elif isinstance(event, OutputDone):
                     if event.finish == "error":
-                        yield sse(stream_error_body(event.error or "Kiro turn failed"))
+                        yield sse(stream_error_body(event.error or "Model turn failed"))
                     else:
                         yield chunk("", finish_reason(event.finish))
     except GatewayError as error:

@@ -91,8 +91,8 @@ def build_catalog(
     for index, model in enumerate(kiro_models):
         entry = copy.deepcopy(reference)
         entry["slug"] = model["id"]
-        entry["display_name"] = f"{model['id']} (Kiro)"
-        entry["description"] = model.get("description") or "Served by kiro-gateway"
+        entry["display_name"] = model["id"]
+        entry["description"] = model.get("description") or "AI coding model"
         entry["priority"] = index + 1
         entry["visibility"] = "list"
         entry["supported_in_api"] = True

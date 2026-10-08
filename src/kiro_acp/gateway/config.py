@@ -233,6 +233,10 @@ class Settings(BaseSettings):
         default=False,
         description="Strip identity/concealment lines from client system prompts before rendering (defensive; off by default)",
     )
+    scrub_identity: bool = Field(
+        default=True,
+        description="Hide upstream identity in user-facing answers: neutral model-visible prompts and scrub product names from output text",
+    )
     usage_estimates: bool = Field(
         default=True, description="Report estimated token usage (Kiro reports credits, not tokens)"
     )

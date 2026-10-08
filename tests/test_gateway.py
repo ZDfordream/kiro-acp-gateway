@@ -155,6 +155,56 @@ async def test_chat_completion_streaming(client: httpx.AsyncClient) -> None:
     assert chunks[-1]["usage"]["total_tokens"] > 0
 
 
+async def test_chat_identity_leak_is_scrubbed(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "x",
+            "messages": [{"role": "user", "content": "echo: I'm Kiro via kiro-gateway."}],
+        },
+    )
+    content = response.json()["choices"][0]["message"]["content"]
+    assert "Kiro" not in content and "kiro-gateway" not in content
+    assert content == "I'm an AI assistant via an AI assistant."
+
+
+async def test_chat_identity_scrubbed_while_streaming(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "x",
+            "messages": [{"role": "user", "content": "echo: I'm Kiro via kiro-gateway."}],
+            "stream": True,
+        },
+    )
+    chunks = [e[1] for e in sse_events(response.text) if isinstance(e[1], dict)]
+    text = "".join(c["choices"][0]["delta"].get("content", "") for c in chunks if c["choices"])
+    assert "Kiro" not in text and "kiro-gateway" not in text
+    assert text == "I'm an AI assistant via an AI assistant."
+
+
+async def test_chat_identity_scrubbing_can_be_disabled(workspace: Path, engine: str) -> None:
+    settings = make_settings(workspace, engine=engine, scrub_identity=False)
+    app = create_app(settings, backend=FakeKiroBackend(settings))
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://gw",
+            headers={"Authorization": "Bearer secret"},
+            timeout=30,
+        ) as http:
+            response = await http.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "x",
+                    "messages": [{"role": "user", "content": "echo: I'm Kiro via kiro-gateway."}],
+                },
+            )
+            content = response.json()["choices"][0]["message"]["content"]
+            assert content == "I'm Kiro via kiro-gateway."
+
+
 async def test_chat_unknown_model_falls_back(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/v1/chat/completions",
@@ -255,6 +305,22 @@ def test_harness_agent_provisioning(tmp_path: Path) -> None:
     path.write_text(json.dumps(stale))
     ensure_harness_agent("kiro-gateway-harness", tmp_path / "agents")
     assert json.loads(path.read_text())["prompt"] != "old"
+
+
+def test_harness_prompts_and_preamble_hide_infra() -> None:
+    from kiro_acp.gateway.conversation import Conversation
+    from kiro_acp.gateway.harness_agent import agent_config
+    from kiro_acp.gateway.prompting import build_system_text
+
+    for config in (agent_config("x"), agent_config("x", mcp=True)):
+        prompt = config["prompt"]
+        assert "kiro" not in prompt.lower()
+        assert "gateway" not in prompt.lower()
+        assert "prompt injection" in prompt  # anti-refusal framing is kept
+        assert "<operator_instructions>" in prompt and "<conversation>" in prompt
+    text = build_system_text(Conversation(system="You are helpful."), emulate_tools=False)
+    assert "kiro" not in text.lower() and "gateway" not in text.lower()
+    assert "AI assistant" in text  # identity-question guidance
 
 
 async def test_text_after_tool_call_is_dropped(client: httpx.AsyncClient) -> None:
@@ -1578,7 +1644,11 @@ async def test_harness_agent_sent_over_the_wire_on_v3(workspace: Path, engine: s
     if engine != "v3":
         pytest.skip("v3 only")
     settings = make_settings(
-        workspace, engine="v3", harness_engine="v3", harness_agent="kiro-gateway-harness"
+        workspace,
+        engine="v3",
+        harness_engine="v3",
+        harness_agent="kiro-gateway-harness",
+        scrub_identity=False,  # the reply echoes the agent name verbatim
     )
     app = create_app(settings, backend=FakeKiroBackend(settings))
     async with app.router.lifespan_context(app):
@@ -1625,7 +1695,7 @@ async def test_stalled_turn_is_cancelled_and_nudged(stall_client: httpx.AsyncCli
     message = body["choices"][0]["message"]
     assert "resumed after stall" in message["content"]
     assert body["kiro"]["stalls"] == 1 and body["kiro"]["stall_recoveries"] == 1
-    assert "Kiro stalled on Running: sleep 999" in (message.get("reasoning_content") or "")
+    assert "Model stalled on Running: sleep 999" in (message.get("reasoning_content") or "")
     # the ledger saw the stall and the recovery turn
     audit = await stall_client.get(body["kiro"]["audit"])
     kinds = [r["kind"] for r in audit.json()["records"]]

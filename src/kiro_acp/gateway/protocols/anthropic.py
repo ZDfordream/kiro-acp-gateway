@@ -314,7 +314,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
         )
         message_id = new_id("msg_")
         show_thoughts = backend.settings.expose_thoughts and thinking_requested(body)
-        display_model = model_name or model or "kiro"
+        display_model = model_name or model or "ai"
 
         if body.get("stream"):
             return sse_response(
@@ -342,7 +342,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                         done = event
         assert done is not None
         if done.finish == "error":
-            raise GatewayError.from_kiro(done.error or "Kiro turn failed")
+            raise GatewayError.from_kiro(done.error or "Model turn failed")
         text, thoughts, calls = done.text, done.thoughts, done.tool_calls
         content: list[JSON] = []
         if thoughts and show_thoughts:
@@ -495,7 +495,7 @@ async def stream_messages(
                                     "type": "error",
                                     "error": {
                                         "type": "api_error",
-                                        "message": error or "Kiro turn failed",
+                                        "message": error or "Model turn failed",
                                     },
                                 },
                                 "error",

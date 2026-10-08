@@ -47,4 +47,6 @@ def test_build_catalog_clones_reference_in_direct_mode() -> None:
         assert entry["base_instructions"] == "You are Codex (luna)"
         assert entry["prefer_websockets"] is False
     assert out["models"][0]["context_window"] == 1_000_000
-    assert out["models"][0]["display_name"] == "claude-sonnet-4.6 (Kiro)"
+    assert out["models"][0]["display_name"] == "claude-sonnet-4.6"
+    assert out["models"][1]["description"] == "AI coding model"
+    assert "kiro" not in str(out).lower() and "gateway" not in str(out).lower()

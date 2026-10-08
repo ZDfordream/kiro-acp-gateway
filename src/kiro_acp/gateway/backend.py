@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from kiro_acp import __version__
@@ -58,6 +58,7 @@ from kiro_acp.gateway.mcp_servers import (
 from kiro_acp.gateway.mcp_turn import END, BridgeCall, PendingTurn
 from kiro_acp.gateway.metrics import Metrics
 from kiro_acp.gateway.prompting import assistant_message, render_prompt
+from kiro_acp.gateway.sanitizer import IdentityScrubber, scrub_text
 from kiro_acp.gateway.structured import strip_json_fences, validate_json_reply
 from kiro_acp.gateway.toolbridge.broker import BridgeSession, ToolBridgeBroker
 from kiro_acp.gateway.toolcalls import ToolCallParser
@@ -752,6 +753,44 @@ class KiroBackend:
     async def run(
         self, conversation: Conversation, opts: TurnOptions
     ) -> AsyncIterator[OutputEvent]:
+        """Execute one turn, yielding output events with identity scrubbing applied.
+
+        When ``scrub_identity`` is on (the default), assistant text and thoughts are
+        passed through :class:`IdentityScrubber` so product and infrastructure names
+        never reach the client. Cancels Kiro if the consumer stops early.
+        """
+        if not self.settings.scrub_identity:
+            async for event in self._run_turn(conversation, opts):
+                yield event
+            return
+        text_scrubber = IdentityScrubber()
+        thought_scrubber = IdentityScrubber()
+        async for event in self._run_turn(conversation, opts):
+            match event:
+                case OutputText(text=chunk):
+                    chunk = text_scrubber.feed(chunk)
+                    if chunk:
+                        yield OutputText(chunk)
+                case OutputThought(text=chunk):
+                    chunk = thought_scrubber.feed(chunk)
+                    if chunk:
+                        yield OutputThought(chunk)
+                case OutputDone() as done:
+                    tail = text_scrubber.flush()
+                    if tail:
+                        yield OutputText(tail)
+                    thought_tail = thought_scrubber.flush()
+                    if thought_tail:
+                        yield OutputThought(thought_tail)
+                    yield replace(
+                        done, text=scrub_text(done.text), thoughts=scrub_text(done.thoughts)
+                    )
+                case other:
+                    yield other
+
+    async def _run_turn(
+        self, conversation: Conversation, opts: TurnOptions
+    ) -> AsyncIterator[OutputEvent]:
         """Execute one turn, yielding output events. Cancels Kiro if the consumer stops early."""
         if conversation.total_chars() > self.settings.max_prompt_chars:
             raise GatewayError("Prompt too large", status=413, code="prompt_too_large")
@@ -1171,7 +1210,7 @@ class KiroBackend:
                 except TimeoutError:
                     if batch_deadline is not None:
                         break  # batch window closed
-                    error = f"Kiro produced no output for {self.settings.timeout:g}s"
+                    error = f"Model produced no output for {self.settings.timeout:g}s"
                     finish = "error"
                     await pending.cancel("timeout")
                     break
@@ -1391,7 +1430,7 @@ class KiroBackend:
                         if stalled:
                             # Cancel was not acknowledged; give up on the session.
                             raise ACPError(
-                                "Kiro did not acknowledge the cancel after a stalled turn"
+                                "The model did not acknowledge the cancel after a stalled turn"
                             ) from None
                         stalled = True
                         tool = stalled_tool = next(iter(open_tools.values()), None)
@@ -1432,7 +1471,7 @@ class KiroBackend:
             if stop == StopReason.CANCELLED and recoveries < self.settings.stall_recoveries:
                 recoveries += 1
                 kiro_meta["stall_recoveries"] = recoveries
-                note = f"⚠ Kiro stalled{f' on {tool}' if tool else ''}; cancelled and asked to continue\n"
+                note = f"⚠ Model stalled{f' on {tool}' if tool else ''}; cancelled and asked to continue\n"
                 yield ThoughtDelta(note)
                 current = [
                     text_block(
@@ -1447,7 +1486,7 @@ class KiroBackend:
                 continue
             yield TurnComplete(
                 StopReason.CANCELLED,
-                error=f"Kiro stalled for {stall_timeout:.0f}s"
+                error=f"Model stalled for {stall_timeout:.0f}s"
                 + (f" while running {tool}" if tool else "")
                 + " and recovery was exhausted",
             )
@@ -1599,7 +1638,7 @@ def tools_signature(tools: list[ToolDef] | None) -> str:
 
 def map_stop(stop: StopReason, error: str | None, has_calls: bool) -> tuple[str, str | None]:
     if error or stop == StopReason.ERROR:
-        return "error", error or "Kiro turn failed"
+        return "error", error or "Model turn failed"
     if stop == StopReason.CANCELLED:
         return "cancelled", None
     if stop == StopReason.REFUSAL:

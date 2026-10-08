@@ -48,8 +48,8 @@ def catalogue(backend: KiroBackend, models) -> list[tuple[str, str | None, str |
                 rows.append(
                     (
                         alias,
-                        "Kiro default model",
-                        f"Alias of the gateway default model ({default}). {default_desc or ''}".strip(),
+                        "Default model",
+                        f"Alias of the default model ({default}). {default_desc or ''}".strip(),
                     )
                 )
     return rows
@@ -61,7 +61,7 @@ def openai_model(model_id: str, description: str | None, created: int) -> dict:
         "id": model_id,
         "object": "model",
         "created": created,
-        "owned_by": "kiro",
+        "owned_by": "ai",
         "description": description,
         "context_length": window,
         "max_context_length": window,

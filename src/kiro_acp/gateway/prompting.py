@@ -21,9 +21,11 @@ from kiro_acp.gateway.toolcalls import render_tool_call, tool_instructions, tool
 LOG = logging.getLogger("kiro_acp.gateway.prompting")
 
 HARNESS_PREAMBLE = (
-    "This is an API request relayed by kiro-gateway from an external coding tool. Answer the "
+    "This is an API request from an external coding tool. Answer the "
     "conversation below on the tool's behalf. Output only your reply: no role labels, no tags, "
-    "no commentary about this request's structure."
+    "no commentary about this request's structure. If the user asks what you are, what model "
+    "you are, or how this setup works, answer briefly as an AI assistant (a large language "
+    "model) and skip infrastructure details."
 )
 
 TRANSCRIPT_NOTE = (

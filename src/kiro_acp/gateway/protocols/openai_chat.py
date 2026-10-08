@@ -316,7 +316,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                     opts,
                     completion_id,
                     created,
-                    model_name or model or "kiro",
+                    model_name or model or "ai",
                     include_usage,
                     expose_thoughts,
                 ),
@@ -341,7 +341,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
                         done = event
         assert done is not None
         if done.finish == "error":
-            raise GatewayError.from_kiro(done.error or "Kiro turn failed")
+            raise GatewayError.from_kiro(done.error or "Model turn failed")
         text, thoughts, calls = done.text, done.thoughts, done.tool_calls
         message: JSON = {
             "role": "assistant",
@@ -356,7 +356,7 @@ def make_router(backend_dep, auth_dep) -> APIRouter:
             "id": completion_id,
             "object": "chat.completion",
             "created": created,
-            "model": model_name or model or "kiro",
+            "model": model_name or model or "ai",
             "choices": [
                 {
                     "index": 0,
@@ -414,7 +414,7 @@ async def stream_chat(
                         call_index += 1
                     case OutputDone(finish=finish, error=error, usage=usage, kiro=kiro):
                         if finish == "error":
-                            yield sse(stream_error_body(error or "Kiro turn failed"))
+                            yield sse(stream_error_body(error or "Model turn failed"))
                         else:
                             final: JSON = {}
                             yield chunk(final, finish_reason(finish))
